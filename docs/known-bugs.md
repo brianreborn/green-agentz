@@ -46,9 +46,14 @@ Still open:
 - McAfee on shalom: no Add-Type/P/Invoke; long PowerShell here-strings abort; do not disable RTS.
 - CUDA 6.5 installer is **on disk only** (`C:\LocalAI\_tmp\cuda_6.5.19_windows_general_64.exe`, md5 `63575eee9cb5cbf3e84f9c4496060399`). Do not run it on Win11/8600 (driver risk). 224MB VRAM cannot hold 0.5B Q4.
 
-## Unicorn / file drop
+## Known limitations: file drop vs agent switch
 
-Not verified this session. `C:\LocalAI\green-unicorn.py` exists on shalom HTTP listing. Need drop of all GRZ types at any time (no disable-during-generate). Gateway mixed image+audio reject can still block a dual drop.
+- **Gateway does not require an explicit agent switch** to accept a drop that arrives as a real multimodal part. `hardRuleRoute`: audio part -> `audio-transcription-agent`; image part -> `vision-layout-agent`. Those beat slash and the llama.app pin.
+- **You do need `/image` (or `/imagine` `/draw`)** for *generating* a picture from text. Dropping an image is look-at-this (vision), not image-gen.
+- **llama.app / unicorn UI was not verified.** Many clients hide the attach/drop control unless the selected model is vision or audio. If drop is greyed or rejects types, switch with `/vision` or `/audio` first, then drop. That is a client limitation, not a gateway one.
+- Drop UI accept-list / disable-during-generate was **not patched** this session. If almost every file type still will not drop, it is still the client.
+- Mixed image+audio in one request still `ValidationError`.
+- Unicorn script on shalom HTTP listing: `C:\LocalAI\green-unicorn.py` (unread this wrap).
 
 ## Working around routing today
 
