@@ -1,0 +1,1 @@
+{"model":"general-text-speculator","messages":[{"role":"user","content":"Reply with exactly the word hello and nothing else."}],"max_tokens":24,"temperature":0}
