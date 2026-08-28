@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AgentRegistry } from '../src/registry.mjs';
-import { routeRequest, isExplicitTranslationRequest } from '../src/routing.mjs';
+import {
+  routeRequest,
+  isExplicitTranslationRequest,
+  latestUserMessageText,
+  hardRuleRoute,
+} from '../src/routing.mjs';
 import { ValidationError } from '../src/errors.mjs';
 import { sampleManifest } from './helpers.mjs';
 
@@ -35,17 +40,42 @@ test('mixed image and audio is rejected', () => {
   }, registry()), ValidationError);
 });
 
-test('unknown alias is rejected', () => {
-  assert.throws(() => routeRequest({ model: 'translation-agent', messages: [] }, registry()), ValidationError);
+test('text-only turns do not regex C++ or image intent; nexus decides', () => {
+  const routed = routeRequest({
+    model: 'qwenstral-code-speculator',
+    messages: [
+      { role: 'user', content: 'write a C++ program about a hero' },
+      { role: 'assistant', content: '#include <iostream>' },
+      { role: 'user', content: 'Can you show me an image of how that hero might look?' },
+    ],
+  }, registry());
+  assert.equal(routed.effectiveAlias, null);
+  assert.equal(routed.reason, 'nexus');
+});
+
+test('lock_alias honors the requested specialist', () => {
+  const routed = hardRuleRoute({
+    lock_alias: true,
+    model: 'qwenstral-code-speculator',
+    messages: [{ role: 'user', content: 'hello' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.reason, 'lock_alias');
+});
+
+test('latest user message ignores the earlier C++ transcript', () => {
+  const text = latestUserMessageText({
+    messages: [
+      { role: 'user', content: 'write a C++ program' },
+      { role: 'assistant', content: 'int main() {}' },
+      { role: 'user', content: 'Can you show me an image of how that hero might look?' },
+    ],
+  });
+  assert.equal(text, 'Can you show me an image of how that hero might look?');
+  assert.equal(text.includes('C++'), false);
 });
 
 test('translation is not inferred from foreign-looking text', () => {
   assert.equal(isExplicitTranslationRequest({ messages: [{ role: 'user', content: 'Bonjour, comment ça va?' }] }), false);
   assert.equal(isExplicitTranslationRequest({ messages: [{ role: 'user', content: 'Please translate this to English' }] }), true);
-});
-
-test('session affinity wins over requested alias for text', () => {
-  const routed = routeRequest({ model: 'qwenstral-code-speculator', messages: [{ role: 'user', content: 'hello' }] }, registry(), 'general-text-speculator');
-  assert.equal(routed.effectiveAlias, 'general-text-speculator');
-  assert.equal(routed.reason, 'session_affinity');
 });

@@ -20,11 +20,43 @@ function downstreamHeaders(response) {
   return headers;
 }
 
+export function sanitizeCompletionJson(payload, { keepReasoning = false } = {}) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const next = { ...payload };
+  delete next.timings;
+  if (keepReasoning) return next;
+  if (Array.isArray(next.choices)) {
+    next.choices = next.choices.map((choice) => {
+      if (!choice || typeof choice !== 'object') return choice;
+      const copy = { ...choice };
+      if (copy.message && typeof copy.message === 'object') {
+        const message = { ...copy.message };
+        delete message.reasoning;
+        delete message.reasoning_content;
+        copy.message = message;
+      }
+      if (copy.delta && typeof copy.delta === 'object') {
+        const delta = { ...copy.delta };
+        delete delta.reasoning;
+        delete delta.reasoning_content;
+        copy.delta = delta;
+      }
+      return copy;
+    });
+  }
+  return next;
+}
+
+function clientAskedForReasoning(body) {
+  return body?.enable_thinking === true || body?.chat_template_kwargs?.enable_thinking === true;
+}
+
 export async function proxyJson({ request, response, body, target, config, signal, fetchImpl = fetch }) {
   const payload = Buffer.from(JSON.stringify(body));
   const idempotencyKey = request.headers['idempotency-key'];
   const deadline = Date.now() + config.retry_deadline_ms;
   let attempt = 0;
+  const keepReasoning = clientAskedForReasoning(body);
   while (true) {
     try {
       const upstream = await fetchImpl(target, { method: request.method, headers: upstreamHeaders(request), body: payload, signal });
@@ -32,6 +64,20 @@ export async function proxyJson({ request, response, body, target, config, signa
         await upstream.body?.cancel();
         await sleep(jitteredBackoff(attempt++, config.retry_initial_ms, config.retry_max_ms), signal);
         continue;
+      }
+      const canSanitize = !body?.stream && typeof upstream.text === 'function';
+      if (canSanitize) {
+        const raw = await upstream.text();
+        const headers = downstreamHeaders(upstream);
+        delete headers['content-length'];
+        let data;
+        try {
+          data = Buffer.from(JSON.stringify(sanitizeCompletionJson(JSON.parse(raw), { keepReasoning })));
+        } catch {
+          data = Buffer.from(raw);
+        }
+        response.writeHead(upstream.status, { ...headers, 'content-length': data.length });
+        return response.end(data);
       }
       response.writeHead(upstream.status, downstreamHeaders(upstream));
       if (!upstream.body) return response.end();

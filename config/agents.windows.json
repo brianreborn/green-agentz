@@ -84,7 +84,7 @@
       "system_policy": "policies/code-structured.md",
       "context_size": 4096,
       "profiles": [
-        {"id": "vulkan-all", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "all", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
+        {"id": "vulkan-all", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "6", "--threads-batch", "6", "--n-gpu-layers", "all", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
         {"id": "hybrid-12", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "12", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
         {"id": "cpu-4", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "none", "--no-op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "0", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]}
       ]
@@ -112,7 +112,7 @@
       "context_size": 8192,
       "experimental": ["qualification-gated-eagle3-speculation"],
       "profiles": [
-        {"id": "vulkan-all", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "all", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
+        {"id": "vulkan-all", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "6", "--threads-batch", "6", "--n-gpu-layers", "all", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
         {"id": "hybrid-12", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "Vulkan0", "--op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "12", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]},
         {"id": "cpu-4", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "none", "--no-op-offload", "--threads", "4", "--threads-batch", "4", "--n-gpu-layers", "0", "--batch-size", "512", "--ubatch-size", "128", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0"]}
       ]
@@ -145,13 +145,19 @@
     },
     {
       "alias": "tool-router-agent",
-      "description": "Deterministic intent and tool routing with optional small-model fallback",
-      "runtime": "logical",
+      "description": "Resident CPU nexus: route each turn to a specialist and accept HANDOFF",
+      "runtime": "llama_server",
+      "port": 8187,
+      "resident": true,
       "native_capabilities": ["text", "routing", "json"],
       "gateway_accepted_capabilities": ["text", "image", "audio", "file"],
-      "required_artifacts": [],
+      "model": "C:\\LocalAI\\Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf",
+      "required_artifacts": ["model"],
       "system_policy": "policies/tool-router.md",
-      "profiles": [{"id": "deterministic", "args": []}]
+      "context_size": 2048,
+      "profiles": [
+        {"id": "cpu-2", "args": ["--load-mode", "mmap", "--fit", "off", "--device", "none", "--no-op-offload", "--threads", "2", "--threads-batch", "2", "--n-gpu-layers", "0"]}
+      ]
     },
     {
       "alias": "safety-policy-agent",
@@ -186,6 +192,7 @@
       "gateway_accepted_capabilities": ["text", "image"],
       "model": "C:\\LocalAI\\stable-diffusion.cpp\\models\\sd15-q4_0.gguf",
       "required_artifacts": ["model"],
+      "system_policy": "policies/image-generation.md",
       "profiles": []
     }
   ],

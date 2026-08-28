@@ -116,6 +116,15 @@ async function cmdServe(ctx, args) {
   const server = await gateway.listen(argValue(args, '--host'), argValue(args, '--port'));
   const address = server.address();
   console.error(`green-roomz listening on http://${address.address}:${address.port}`);
+  const nexus = ctx.registry.agents.get('tool-router-agent');
+  if (nexus && ctx.registry.status(nexus.alias).state !== 'unavailable') {
+    try {
+      await ctx.processes.ensure(nexus);
+      console.error(`pre-warmed ${nexus.alias} on :${nexus.port} (resident cpu kernel; specialists stay cold)`);
+    } catch (error) {
+      console.error(`nexus pre-warm failed: ${error.message}`);
+    }
+  }
   const shutdown = async () => {
     console.error('draining owned backends');
     server.close();

@@ -1,6 +1,12 @@
 import { fileExists } from './util.mjs';
 import { ValidationError } from './errors.mjs';
 
+function routingBehavior(alias) {
+  if (alias === 'tool-router-agent') return 'nexus';
+  if (alias === 'vision-layout-agent' || alias === 'audio-transcription-agent') return 'modality_override';
+  return 'explicit';
+}
+
 export class AgentRegistry {
   constructor(manifest) {
     this.manifest = manifest;
@@ -49,10 +55,11 @@ export class AgentRegistry {
         owned_by: 'green-roomz',
         native_capabilities: agent.native_capabilities,
         gateway_accepted_capabilities: agent.gateway_accepted_capabilities,
-        routing_behavior: ['vision-layout-agent', 'audio-transcription-agent'].includes(agent.alias) ? 'modality_override' : 'explicit',
+        routing_behavior: routingBehavior(agent.alias),
         availability: status.state,
         unavailable_reasons: status.missing,
         experimental_features: agent.experimental ?? [],
+        resident: Boolean(agent.resident) || agent.alias === 'tool-router-agent',
       };
     });
   }

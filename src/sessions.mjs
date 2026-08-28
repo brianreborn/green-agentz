@@ -28,6 +28,16 @@ export class SessionLedger {
     return { ...entry };
   }
 
+  setAgentAlias(id, agentAlias) {
+    const entry = this.entries.get(id);
+    if (!entry) return false;
+    entry.agentAlias = agentAlias;
+    const now = this.clock();
+    entry.lastAccess = now;
+    entry.expiresAt = now + this.ttlMs;
+    return true;
+  }
+
   expire() {
     const now = this.clock();
     for (const [id, entry] of this.entries) if (entry.expiresAt <= now) this.entries.delete(id);

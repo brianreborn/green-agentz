@@ -1,10 +1,32 @@
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import { existsSync, statSync } from 'node:fs';
 import { UnavailableError } from './errors.mjs';
 import { sleep } from './util.mjs';
 import { profileAdmitted } from './memory.mjs';
 
 const MAX_LOG_CHARS = 64 * 1024;
+
+export function vulkanAllThreadCount(logicalCpus = os.cpus().length) {
+  const n = Number(logicalCpus);
+  const logical = Number.isFinite(n) && n > 0 ? Math.trunc(n) : 8;
+  // Ryzen 5 7520U APU: 8 logical CPUs, AMD Radeon ~8058 MiB shared Vulkan.
+  // vulkan-all uses logical-2 (6 on this host): those two cores are reserved for the
+  // resident CPU nexus (--threads 2) so it can run concurrently with a GPU specialist.
+  // 4/8 shows as 50% in Task Manager; 8/8 starves the GPU. hybrid/cpu-4 keep their own --threads.
+  return Math.max(1, logical - 2);
+}
+
+export function withVulkanAllThreads(args, logicalCpus = os.cpus().length) {
+  const threads = String(vulkanAllThreadCount(logicalCpus));
+  const next = [...(args ?? [])];
+  for (const flag of ['--threads', '--threads-batch']) {
+    const index = next.indexOf(flag);
+    if (index !== -1 && index + 1 < next.length) next[index + 1] = threads;
+  }
+  return next;
+}
+
 
 function flagValue(args, flag) {
   const index = (args ?? []).indexOf(flag);
@@ -51,6 +73,11 @@ export function shouldAttachDraft(agent) {
   return true;
 }
 
+export function isResidentAgent(agent) {
+  return Boolean(agent?.resident) || agent?.alias === 'tool-router-agent';
+}
+
+
 export function orderProfiles(agent, profiles, { preferredId, freeMemoryBytes } = {}) {
   const list = [...(profiles ?? [])];
   if (!list.length) return [{ id: 'default', args: [] }];
@@ -90,6 +117,9 @@ export class ProcessManager {
     if (agent.runtime === 'logical') return { logical: true, agent };
     const current = this.processes.get(agent.alias);
     if (current?.state === 'ready' && current.child.exitCode === null) return current;
+    // Resident CPU nexus (tool-router-agent) stays loaded for the life of serve.
+    // Starting a specialist must never stop or unload it — two llama-server
+    // processes at once is required (nexus :8187 CPU + specialist vulkan).
     if (this.starting.has(agent.alias)) return this.starting.get(agent.alias);
     const promise = Promise.resolve().then(() => this.start(agent, { signal }));
     this.starting.set(agent.alias, promise.finally(() => this.starting.delete(agent.alias)));
@@ -102,6 +132,12 @@ export class ProcessManager {
     if (runtime.kind === 'llama-server') {
       args.push('--port', String(agent.port), '--model', agent.model, '--alias', agent.alias, '--ctx-size', String(profile?.context_size ?? agent.context_size ?? 4096));
       args.push(...(agent.extra_args ?? []), ...(profile?.args ?? []));
+      // Only rewrite vulkan-all; hybrid/cpu-4 already set --threads and must not regress.
+      if (profile?.id === 'vulkan-all') {
+        const patched = withVulkanAllThreads(args, os.cpus().length);
+        args.length = 0;
+        args.push(...patched);
+      }
       if (agent.projector) args.push('--mmproj', agent.projector);
       if (shouldAttachDraft(agent)) {
         args.push(
@@ -185,6 +221,7 @@ export class ProcessManager {
       state: 'starting',
       logs: '',
       owned: true,
+      resident: isResidentAgent(agent),
     };
     this.processes.set(agent.alias, record);
     this.registry.setStatus(agent.alias, 'starting', { profileId: profile.id });

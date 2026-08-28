@@ -1,9 +1,13 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, NEXUS_ALIAS } from './constants.mjs';
 import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
-import { jsonResponse, redact, secureEquals } from './util.mjs';
-import { routeRequest } from './routing.mjs';
-import { proxyJson } from './proxy.mjs';
+import { deliverPeek, peekSpecialist } from './handoff.mjs';
+import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
+import { proxyJson } from './proxy.mjs';
+import { detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
+import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
   '/health',
@@ -12,6 +16,7 @@ const EXPLICIT_ROUTES = new Set([
   '/props',
   '/metrics',
   '/v1/chat/completions',
+  '/v1/chat/completions/route',
   '/v1/embeddings',
   '/v1/rerank',
 ]);
@@ -55,29 +60,57 @@ function corsHeaders(manifest, origin) {
   };
 }
 
-// Measured 10:02 PT live POST: Qwen3 thinking consumed all 24 max_tokens (content empty).
-const QWEN3_SHORT_MAX_TOKENS = 64;
-
-export function prepareInferenceBody(body, agent) {
-  const payload = { ...body, model: agent.alias };
-  if (agent.alias !== 'general-text-speculator') return payload;
-  const explicit = payload.enable_thinking ?? payload.chat_template_kwargs?.enable_thinking;
-  if (explicit !== undefined) return payload;
-  const maxTokens = Number(payload.max_tokens);
-  if (Number.isFinite(maxTokens) && maxTokens > 0 && maxTokens < QWEN3_SHORT_MAX_TOKENS) {
-    payload.chat_template_kwargs = { ...(payload.chat_template_kwargs ?? {}), enable_thinking: false };
+export function injectSystemPolicy(body, agent) {
+  const payload = { ...body };
+  const policyPath = agent?.system_policy;
+  if (!policyPath || !existsSync(policyPath)) return payload;
+  const policy = readFileSync(policyPath, 'utf8');
+  const messages = Array.isArray(payload.messages) ? [...payload.messages] : [];
+  const marker = policy.trim().slice(0, 24);
+  if (messages.some((message) => message?.role === 'system' && String(message.content ?? '').includes(marker))) {
+    payload.messages = messages;
+    return payload;
   }
+  payload.messages = [{ role: 'system', content: policy }, ...messages];
   return payload;
 }
 
+export function prepareInferenceBody(body, agent) {
+  const stripped = stripSlashCommand(body);
+  const payload = injectSystemPolicy({ ...stripped, model: agent.alias }, agent);
+  delete payload.route_plan_only;
+  delete payload.lock_alias;
+  delete payload.session_id;
+  if (agent.alias === NEXUS_ALIAS) {
+    payload.enable_thinking = false;
+    payload.chat_template_kwargs = { ...(payload.chat_template_kwargs ?? {}), enable_thinking: false };
+    return payload;
+  }
+  if (agent.alias !== FALLBACK_ALIAS) return payload;
+  const explicit = payload.enable_thinking ?? payload.chat_template_kwargs?.enable_thinking;
+  if (explicit !== undefined) return payload;
+  payload.chat_template_kwargs = { ...(payload.chat_template_kwargs ?? {}), enable_thinking: false };
+  return payload;
+}
+
+function wantsRoutePlan(body, pathname) {
+  return body?.route_plan_only === true || String(pathname ?? '').endsWith('/route');
+}
+
+function isChatPath(pathname) {
+  const path = String(pathname ?? '').replace(/\/route$/, '') || '/v1/chat/completions';
+  return path === '/v1/chat/completions' || path.endsWith('/chat/completions');
+}
+
 export class Gateway {
-  constructor({ manifest, registry, processes, sessions, policy, hostAdapter }) {
+  constructor({ manifest, registry, processes, sessions, policy, hostAdapter, fetchImpl }) {
     this.manifest = manifest;
     this.registry = registry;
     this.processes = processes;
     this.sessions = sessions;
     this.policy = policy;
     this.hostAdapter = hostAdapter;
+    this.fetchImpl = fetchImpl ?? fetch;
     this.apiKey = process.env.GREEN_ROOMZ_API_KEY || '';
     this.startedAt = Date.now();
   }
@@ -97,8 +130,6 @@ export class Gateway {
     const origin = request.headers.origin;
     const cors = corsHeaders(this.manifest, origin);
     const abort = new AbortController();
-    // IncomingMessage 'close' fires after the body is consumed, not only on hangup.
-    // Abort the backend start only if the client disconnects before we finish writing.
     response.once('close', () => {
       if (!response.writableFinished) abort.abort();
     });
@@ -111,7 +142,9 @@ export class Gateway {
     try {
       const identity = identityFrom(request, this.apiKey);
       if (!identity) return jsonResponse(response, 401, { error: { message: 'Unauthorized', type: 'auth_error' } }, cors);
-      if (!EXPLICIT_ROUTES.has(url.pathname)) return jsonResponse(response, 404, { error: { message: 'Not found', type: 'not_found' } }, cors);
+      if (!EXPLICIT_ROUTES.has(url.pathname) && !url.pathname.endsWith('/route')) {
+        return jsonResponse(response, 404, { error: { message: 'Not found', type: 'not_found' } }, cors);
+      }
       if (url.pathname === '/health' || url.pathname === '/v1/health') {
         return jsonResponse(response, 200, this.health(), cors);
       }
@@ -135,7 +168,7 @@ export class Gateway {
       const body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
       if (url.pathname === '/v1/embeddings') body.model = body.model ?? 'semantic-embedding-agent';
       if (url.pathname === '/v1/rerank') body.model = body.model ?? 'retrieval-rerank-agent';
-      return await this.handleInference(request, response, body, identity, cors);
+      return await this.handleInference(request, response, body, identity, cors, url.pathname);
     } catch (error) {
       const status = error instanceof GreenRoomzError ? error.status : 500;
       const retryAfter = error instanceof UnavailableError ? { 'retry-after': '2' } : {};
@@ -172,61 +205,230 @@ export class Gateway {
         pid: record.pid,
         state: record.state,
         profileId: record.profileId,
+        resident: Boolean(record.resident),
       })),
       resources: this.hostAdapter?.sampleResources?.() ?? null,
     };
   }
 
-  async handleInference(request, response, body, identity, cors) {
+  routeHeaders(issuedSession, routed, cors, extra = {}) {
+    return {
+      'x-session-id': headerSafe(issuedSession),
+      'x-green-roomz-requested-alias': headerSafe(String(routed.requestedAlias ?? '')),
+      'x-green-roomz-effective-alias': headerSafe(routed.effectiveAlias ?? ''),
+      'x-green-roomz-route-reason': headerSafe(routed.reason ?? ''),
+      'x-green-roomz-hops': headerSafe(extra.hops ?? ''),
+      'x-green-roomz-nexus': NEXUS_ALIAS,
+      ...cors,
+    };
+  }
+
+  async handleInference(request, response, body, identity, cors, pathname) {
     const sessionId = request.headers['x-session-id'] || body.session_id;
     const session = this.sessions.get(sessionId, identity);
-    const routed = routeRequest(body, this.registry, session?.agentAlias);
-    const availability = this.registry.status(routed.effectiveAlias);
-    if (availability.state === 'unavailable') {
-      throw new UnavailableError(`${routed.effectiveAlias} is unavailable`, availability.missing);
+    const planOnly = wantsRoutePlan(body, pathname ?? request.url?.split('?')[0]);
+    if (planOnly) {
+      return this.handleRoutePlan(request, response, body, identity, session, cors);
     }
-    const issuedSession = session?.id ?? this.sessions.create({
-      identity,
-      agentAlias: routed.effectiveAlias,
-      modality: routed.modality,
-    });
-    response.setHeader('x-session-id', issuedSession);
-    response.setHeader('x-green-roomz-requested-alias', String(routed.requestedAlias ?? ''));
-    response.setHeader('x-green-roomz-effective-alias', routed.effectiveAlias);
-    response.setHeader('x-green-roomz-route-reason', routed.reason);
-    for (const [key, value] of Object.entries(cors)) response.setHeader(key, value);
 
-    if (routed.agent.runtime === 'logical') {
-      const plan = planRoute(body);
+    if (!isChatPath(pathname ?? request.url?.split('?')[0])) {
+      return this.handleDirectAlias(request, response, body, identity, session, cors);
+    }
+
+    return this.handleChatTurn(request, response, body, identity, session, cors, pathname);
+  }
+
+  async handleRoutePlan(request, response, body, identity, session, cors) {
+    const hard = hardRuleRoute(body, this.registry);
+    if (hard.effectiveAlias) {
+      const routed = {
+        requestedAlias: body.model ?? null,
+        effectiveAlias: hard.effectiveAlias,
+        reason: hard.reason,
+        modality: hard.modality,
+      };
+      const issuedSession = session?.id ?? this.sessions.create({
+        identity,
+        agentAlias: routed.effectiveAlias,
+        modality: routed.modality,
+      });
       return jsonResponse(response, 200, {
         id: `grz-route-${issuedSession}`,
         object: 'chat.completion',
-        model: routed.effectiveAlias,
-        choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify(plan) }, finish_reason: 'stop' }],
+        model: NEXUS_ALIAS,
+        choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ route: hard.effectiveAlias, reason_code: hard.reason }) }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      }, {
-        'x-session-id': issuedSession,
-        'x-green-roomz-requested-alias': String(routed.requestedAlias ?? ''),
-        'x-green-roomz-effective-alias': routed.effectiveAlias,
-        'x-green-roomz-route-reason': routed.reason,
-        ...cors,
-      });
+      }, this.routeHeaders(issuedSession, routed, cors, { hops: '' }));
     }
+    const consultBody = stripSlashCommand(body);
+    const nexusLive = this.registry.status(NEXUS_ALIAS).state !== 'unavailable';
+    let plan = planRoute({ messages: [{ role: 'user', content: latestUserMessageText(consultBody) }] });
+    if (nexusLive) {
+      try {
+        const picked = await consultNexus({
+          processes: this.processes,
+          registry: this.registry,
+          fetchImpl: this.fetchImpl,
+          body: consultBody,
+          visited: new Set(),
+          notes: [],
+          signal: request.abortSignal,
+        });
+        if (picked?.route) {
+          plan = {
+            route: picked.route,
+            confidence: picked.confidence,
+            reason_code: picked.reason,
+            required_modalities: ['text'],
+            allowed_tool_arguments: {},
+          };
+        }
+      } catch {}
+    }
+    const alias = isRoutableAlias(this.registry, plan.route) ? plan.route : (isRoutableAlias(this.registry, FALLBACK_ALIAS) ? FALLBACK_ALIAS : NEXUS_ALIAS);
+    plan = { ...plan, route: alias };
+    const routed = {
+      requestedAlias: body.model ?? null,
+      effectiveAlias: alias,
+      reason: plan.reason_code,
+      modality: detectModalities(body),
+    };
+    const issuedSession = session?.id ?? this.sessions.create({
+      identity,
+      agentAlias: routed.effectiveAlias ?? NEXUS_ALIAS,
+      modality: routed.modality,
+    });
+    return jsonResponse(response, 200, {
+      id: `grz-route-${issuedSession}`,
+      object: 'chat.completion',
+      model: NEXUS_ALIAS,
+      choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify(plan) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    }, this.routeHeaders(issuedSession, routed, cors, { hops: '' }));
+  }
 
+  async handleDirectAlias(request, response, body, identity, session, cors) {
+    const alias = body.model;
+    if (!alias || !this.registry.agents.has(alias)) throw new ValidationError(`Unknown agent alias: ${alias}`);
+    const availability = this.registry.status(alias);
+    if (availability.state === 'unavailable') throw new UnavailableError(`${alias} is unavailable`, availability.missing);
+    const agent = this.registry.get(alias);
+    const issuedSession = session?.id ?? this.sessions.create({
+      identity,
+      agentAlias: alias,
+      modality: detectModalities(body),
+    });
+    if (session?.id) this.sessions.setAgentAlias(issuedSession, alias);
+    const headers = this.routeHeaders(issuedSession, { requestedAlias: body.model, effectiveAlias: alias, reason: 'requested_alias' }, cors, { hops: alias });
+    for (const [key, value] of Object.entries(headers)) response.setHeader(key, value);
     const release = await this.policy.acquire(request.abortSignal);
     try {
-      const record = await this.processes.ensure(routed.agent, { signal: request.abortSignal });
-      const payload = prepareInferenceBody(body, routed.agent);
-      const target = `http://127.0.0.1:${routed.agent.port}${request.url.split('?')[0]}`;
+      await this.processes.ensure(agent, { signal: request.abortSignal });
+      const payload = prepareInferenceBody(body, agent);
+      const path = String(request.url.split('?')[0]).replace(/\/route$/, '') || '/v1/chat/completions';
       await proxyJson({
         request,
         response,
         body: payload,
-        target,
+        target: `http://127.0.0.1:${agent.port}${path}`,
         config: this.manifest.gateway,
         signal: request.abortSignal,
+        fetchImpl: this.fetchImpl,
       });
-      return record;
+    } finally {
+      release();
+    }
+  }
+
+  async handleChatTurn(request, response, body, identity, session, cors, pathname) {
+    const visited = new Set();
+    const hops = [];
+    const notes = [];
+    const hard = hardRuleRoute(body, this.registry);
+    const issuedSession = session?.id ?? this.sessions.create({
+      identity,
+      agentAlias: hard.effectiveAlias ?? FALLBACK_ALIAS,
+      modality: hard.modality,
+    });
+
+    const hopHeaders = (alias, reason) => this.routeHeaders(
+      issuedSession,
+      { requestedAlias: body.model ?? null, effectiveAlias: alias ?? '', reason: reason ?? 'nexus' },
+      cors,
+      { hops: hops.join(',') },
+    );
+
+    const release = await this.policy.acquire(request.abortSignal);
+    try {
+      while (hops.length < MAX_SPECIALIST_HOPS) {
+        let alias;
+        let reason;
+        if (hops.length === 0 && hard.effectiveAlias) {
+          alias = hard.effectiveAlias;
+          reason = hard.reason;
+          if (!isRoutableAlias(this.registry, alias)) {
+            throw new UnavailableError(`${alias} is unavailable`, this.registry.status(alias).missing);
+          }
+        } else {
+          const picked = await consultNexus({
+            processes: this.processes,
+            registry: this.registry,
+            fetchImpl: this.fetchImpl,
+            body: stripSlashCommand(body),
+            visited,
+            notes,
+            signal: request.abortSignal,
+          });
+          alias = picked.route;
+          reason = picked.reason ?? 'nexus';
+        }
+
+        if (!alias || visited.has(alias) || alias === NEXUS_ALIAS) break;
+        if (!isRoutableAlias(this.registry, alias)) {
+          visited.add(alias);
+          hops.push(alias);
+          notes.push(stripControls(`${alias} unavailable (missing model)`));
+          continue;
+        }
+
+        visited.add(alias);
+        hops.push(alias);
+        const agent = this.registry.get(alias);
+        const record = await this.processes.ensure(agent, { signal: request.abortSignal });
+        if (record?.logical) throw new UnavailableError(`${alias} has no physical backend to proxy`);
+
+        const payload = prepareInferenceBody(body, agent);
+        const path = String((pathname ?? request.url.split('?')[0])).replace(/\/route$/, '') || '/v1/chat/completions';
+        const target = `http://127.0.0.1:${agent.port}${path}`;
+        const peek = await peekSpecialist({
+          fetchImpl: this.fetchImpl,
+          request,
+          target,
+          body: payload,
+          signal: request.abortSignal,
+        });
+
+        if (peek.handoff) {
+          const suggest = peek.handoff.suggest && peek.handoff.suggest !== 'null' ? peek.handoff.suggest : null;
+          notes.push(stripControls(peek.handoff.reason ?? 'handoff'));
+          if (suggest && suggest !== NEXUS_ALIAS && isRoutableAlias(this.registry, suggest)) notes.push(stripControls(`specialist suggested ${suggest}`));
+          continue;
+        }
+
+        if (session?.id) this.sessions.setAgentAlias(issuedSession, alias);
+        else this.sessions.setAgentAlias(issuedSession, alias);
+        const headers = hopHeaders(alias, reason);
+        for (const [key, value] of Object.entries(headers)) response.setHeader(key, value);
+        return deliverPeek({ peek, request, response, body: payload, headers });
+      }
+
+      return jsonResponse(response, 422, {
+        error: {
+          type: 'route_exhausted',
+          message: 'No specialist accepted this turn',
+          visited: [...visited],
+        },
+      }, hopHeaders(null, 'route_exhausted'));
     } finally {
       release();
     }
@@ -236,7 +438,7 @@ export class Gateway {
     const address = this.bindAddress(host);
     const listenPort = Number(port ?? this.manifest.gateway.port ?? 8080);
     const server = createServer((req, res) => {
-      Promise.resolve(this.handle(req, res)).catch((error) => { if (!res.headersSent) jsonResponse(res, 500, { error: { message: String(error.message), type: "internal_error" } }); });
+      Promise.resolve(this.handle(req, res)).catch((error) => { if (!res.headersSent) jsonResponse(res, 500, { error: { message: String(error.message), type: 'internal_error' } }); });
     });
     return new Promise((resolve, reject) => {
       server.once('error', reject);

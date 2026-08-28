@@ -76,6 +76,16 @@ export function redact(value) {
     .replace(/("?(?:api[_-]?key|authorization)"?\s*[:=]\s*)"?[^",\s]+"?/gi, '$1[REDACTED]');
 }
 
+const C0_C1 = /[\u0000-\u001F\u007F-\u009F]/g;
+
+export function stripControls(value) {
+  return String(value ?? '').replace(C0_C1, ' ').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
+export function headerSafe(value) {
+  return stripControls(value).slice(0, 240);
+}
+
 export function jsonResponse(response, status, body, headers = {}) {
   const data = Buffer.from(JSON.stringify(body));
   response.writeHead(status, {

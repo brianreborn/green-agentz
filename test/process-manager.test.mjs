@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ProcessManager, orderProfiles } from '../src/process-manager.mjs';
+import { ProcessManager, orderProfiles, vulkanAllThreadCount, withVulkanAllThreads } from '../src/process-manager.mjs';
 import { AgentRegistry } from '../src/registry.mjs';
 import { sampleManifest } from './helpers.mjs';
 
@@ -173,4 +173,56 @@ test('start tries the next profile after a non-abort startProfile failure', asyn
   assert.equal(record.profileId, 'vulkan-all');
   assert.equal(spawned.length, 2);
   await manager.stop(agent.alias);
+});
+
+test('vulkan-all uses logical CPUs minus two (6 on an 8-thread APU)', () => {
+  assert.equal(vulkanAllThreadCount(8), 6);
+  assert.equal(vulkanAllThreadCount(4), 2);
+  const vulkan = withVulkanAllThreads(['--threads', '4', '--threads-batch', '4', '--n-gpu-layers', 'all'], 8);
+  assert.equal(vulkan[vulkan.indexOf('--threads') + 1], '6');
+  assert.equal(vulkan[vulkan.indexOf('--threads-batch') + 1], '6');
+});
+
+test('buildLaunch rewrites vulkan-all threads and leaves cpu-4 threads alone', () => {
+  const manifest = sampleManifest();
+  const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const registry = new AgentRegistry(manifest);
+  const manager = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('no spawn'); } });
+  const vulkan = manager.buildLaunch(agent, { id: 'vulkan-all', args: ['--device', 'Vulkan0', '--threads', '4', '--threads-batch', '4', '--n-gpu-layers', 'all'] });
+  assert.equal(vulkan.args[vulkan.args.indexOf('--threads') + 1], String(vulkanAllThreadCount()));
+  const cpu = manager.buildLaunch(agent, { id: 'cpu-4', args: ['--device', 'none', '--threads', '4', '--threads-batch', '4', '--n-gpu-layers', '0'] });
+  assert.equal(cpu.args[cpu.args.indexOf('--threads') + 1], '4');
+});
+
+test('ensure specialist does not stop the resident nexus', async () => {
+  const manifest = sampleManifest();
+  const nexus = manifest.agents.find((item) => item.alias === 'tool-router-agent');
+  const code = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const registry = new AgentRegistry(manifest);
+  registry.setStatus(nexus.alias, 'cold');
+  registry.setStatus(code.alias, 'cold');
+  const children = [];
+  const manager = new ProcessManager({
+    manifest,
+    registry,
+    hostAdapter: { applyPriority() { return true; } },
+    spawnImpl: () => {
+      const child = new FakeChild();
+      child.pid = 5000 + children.length;
+      children.push(child);
+      return child;
+    },
+    fetchImpl: async () => ({ ok: true }),
+  });
+  const first = await manager.ensure(nexus);
+  const second = await manager.ensure(code);
+  assert.equal(manager.processes.size, 2);
+  assert.equal(first.resident, true);
+  assert.equal(first.child.exitCode, null);
+  assert.deepEqual(children[0].killed, []);
+  assert.equal(second.alias, 'qwenstral-code-speculator');
+  const launch = manager.buildLaunch(nexus, { id: 'cpu-2', args: ['--device', 'none', '--threads', '2', '--threads-batch', '2', '--n-gpu-layers', '0'] });
+  assert.equal(launch.args[launch.args.indexOf('--threads') + 1], '2');
+  assert.equal(launch.args[launch.args.indexOf('--port') + 1], '18187');
+  await manager.stopAll();
 });

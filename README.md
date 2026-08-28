@@ -6,7 +6,7 @@ This is the first executable implementation. It includes:
 
 - a validated ten-agent manifest;
 - truthful native and gateway capability reporting;
-- structural image/audio routing and session affinity;
+- structural image/audio hard-rules plus a resident CPU nexus for text routing;
 - owned subprocess lifecycle management without killing unrelated processes;
 - concurrent backends with `responsive`, `balanced`, and `maximize` policies;
 - health-driven cold starts and safe pre-stream retries;
@@ -47,6 +47,12 @@ Benchmarking never runs on every request. Results are cached by host fingerprint
 
 ## Current scope
 
-The existing text models can be launched after their profiles are qualified. Vision, ASR, embeddings, reranking, safety, TTS, and image generation remain unavailable until their declared artifacts/runtimes are installed. Logical tool routing runs inside the gateway and requires no model for deterministic routes.
+Artifacts for all ten aliases now live under `C:\LocalAI` (including `Qwen3-4B-eagle3-BF16.gguf`). A serve process started before those downloads will still report them unavailable until it is restarted.
+
+`tool-router-agent` is a resident CPU nexus (0.5B on :8187, `--device none --threads 2`) pre-warmed at serve start and kept loaded. Each chat turn POSTs the latest user message to that live kernel; specialists HANDOFF after a few tokens if the job is not theirs. Regex intent over the transcript is not the production router.
+
+## McAfee on shalom
+
+McAfee Premium Real-Time Scanning false-positives operator PowerShell (serve bounce, elevated `netsh`). Do not disable it. Exclude `C:\LocalAI`, both Green-Roomz trees, and `C:\Program Files\nodejs`. Full click-path and the WLAN autoconfig fix: [docs/mcafee-shalom.md](docs/mcafee-shalom.md).
 
 Android support currently defines the host/sidecar protocol and fingerprint boundary. The recommended mobile deployment places the gateway in Termux or a container and exposes accelerator-backed inference through a native Android sidecar.

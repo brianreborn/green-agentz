@@ -14,68 +14,40 @@ function collectText(body) {
   return parts.join('\n');
 }
 
+// C++ cannot use a trailing \b: '+' is non-word, so "C++ program" would miss \bc\+\+\b.
+const CODE_INTENT = /```|\btypescript\b|\bpython\b|\bfunction\b|\bjson schema\b|\bc\+\+|\bcpp\b|\bprogram\b|\bcode\b/i;
+const IMAGE_GENERATION_INTENT = /\b(text[- ]to[- ]image|generate (an? )?(image|picture|illustration|drawing)|draw (me )?(an? )?(image|picture))\b|\b(render|illuminat(?:e|ed|ion)|calligraphy|illustration)\b/i;
+
+function plan(route, confidence, reason_code, required_modalities) {
+  return { route, confidence, reason_code, required_modalities, allowed_tool_arguments: {} };
+}
+
 export function planRoute(body) {
   const modality = detectModalities(body);
   const text = collectText(body);
   if (modality.image && modality.audio) {
-    return {
-      route: null,
-      confidence: 1,
-      reason_code: 'mixed_media_unsupported',
-      required_modalities: ['image', 'audio'],
-      allowed_tool_arguments: {},
-    };
+    return plan(null, 1, 'mixed_media_unsupported', ['image', 'audio']);
   }
   if (modality.audio) {
-    return {
-      route: 'audio-transcription-agent',
-      confidence: 1,
-      reason_code: 'audio_input',
-      required_modalities: ['audio'],
-      allowed_tool_arguments: {},
-    };
+    return plan('audio-transcription-agent', 1, 'audio_input', ['audio']);
   }
   if (modality.image) {
-    return {
-      route: 'vision-layout-agent',
-      confidence: 1,
-      reason_code: 'image_input',
-      required_modalities: ['image'],
-      allowed_tool_arguments: {},
-    };
+    return plan('vision-layout-agent', 1, 'image_input', ['image']);
+  }
+  if (/\btranslate\b|\btranslation\b/i.test(text)) {
+    return plan('general-text-speculator', 0.9, 'translation_request', ['text']);
   }
   if (/\bembed(ding)?s?\b|\bsimilarit(y|ies)\b/i.test(text)) {
-    return {
-      route: 'semantic-embedding-agent',
-      confidence: 0.8,
-      reason_code: 'embedding_intent',
-      required_modalities: ['text'],
-      allowed_tool_arguments: {},
-    };
+    return plan('semantic-embedding-agent', 0.8, 'embedding_intent', ['text']);
   }
   if (/\brerank\b|\brelevance score\b/i.test(text)) {
-    return {
-      route: 'retrieval-rerank-agent',
-      confidence: 0.8,
-      reason_code: 'rerank_intent',
-      required_modalities: ['text'],
-      allowed_tool_arguments: {},
-    };
+    return plan('retrieval-rerank-agent', 0.8, 'rerank_intent', ['text']);
   }
-  if (/```|\btypescript\b|\bpython\b|\bfunction\b|\bjson schema\b/i.test(text)) {
-    return {
-      route: 'qwenstral-code-speculator',
-      confidence: 0.75,
-      reason_code: 'code_intent',
-      required_modalities: ['text'],
-      allowed_tool_arguments: {},
-    };
+  if (CODE_INTENT.test(text)) {
+    return plan('qwenstral-code-speculator', 0.75, 'code_intent', ['text']);
   }
-  return {
-    route: 'general-text-speculator',
-    confidence: 0.6,
-    reason_code: 'default_text',
-    required_modalities: ['text'],
-    allowed_tool_arguments: {},
-  };
+  if (IMAGE_GENERATION_INTENT.test(text)) {
+    return plan('image-generation-agent', 0.7, 'image_generation_intent', ['text']);
+  }
+  return plan('general-text-speculator', 0.6, 'default_text', ['text']);
 }
