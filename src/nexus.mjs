@@ -144,7 +144,12 @@ async function postNexus({ processes, registry, fetchImpl, body, visited, notes,
   const record = await processes.ensure(nexus, { signal });
   if (record?.logical) throw new Error('nexus is logical');
   const userText = latestUserMessageText(body);
-  const aliases = availableAliases(registry, visited);
+  const mod = detectModalities(body);
+  const aliases = availableAliases(registry, visited).filter((alias) => {
+    if (alias === 'vision-layout-agent' && !mod.image) return false;
+    if (alias === 'audio-transcription-agent' && !mod.audio) return false;
+    return true;
+  });
   const prompt = buildNexusPrompt({ userText, aliases, visited, notes, constraint });
   const payload = withNexusPolicy({
     model: NEXUS_ALIAS,

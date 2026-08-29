@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$Root = 'C:\Users\brian\Documents\Codex\2026-08-28\files-pasted-by-the-user-1\outputs\green-roomz'
+$Root = 'C:\Users\brian\Documents\green-roomz'
 $Node = 'C:\Program Files\nodejs\node.exe'
 $Log = Join-Path $Root 'data\serve.log'
 $Port = 8080
