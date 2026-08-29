@@ -5,12 +5,13 @@ import { createHash } from 'node:crypto';
  * mapped ring, and a PQFreeBSD MAC monitor — producers speak this, not a GGUF:
  *
  * {
- *   seq:     number,            // monotonic publish sequence
- *   kind:    string,            // success | agent_unavailable | route_exhausted | ...
+ *   seq:     number | {hi,lo},  // monotonic publish sequence (number on live hops)
+ *   kind:    string,            // success | agent_unavailable | route_exhausted | hop | ...
  *   source:  string,            // effectiveAlias or producer id
- *   ticket:  string,            // session / correlation id
+ *   ticket:  string | {hi,lo},  // session / correlation id; strings stay strings
  *   ts:      number,            // Date.now()
  *   payload: object | string    // small object, or sha256 hex if a long string
+ *   target:  string             // machine | ifX | all-nics (default machine)
  * }
  *
  * SPSC by default (one producer, one drainer). MPSC is the same envelope:
@@ -18,6 +19,8 @@ import { createHash } from 'node:crypto';
  * register via onEvent() and see every drained slot (broadcast, not steal).
  * push() is non-blocking: drop-oldest when full, return immediately, never
  * wait for drain. Drain runs on setImmediate so the user path is not stalled.
+ *
+ * Live hops keep numeric seq + string ticket. Monitor IPC may pass {hi,lo}.
  */
 
 function nextPow2(n) {
@@ -33,6 +36,26 @@ function clonePayload(payload) {
   }
   if (typeof payload === 'object' && !Array.isArray(payload)) return { ...payload };
   return payload;
+}
+
+function isU64Like(value) {
+  return value != null && typeof value === 'object' && !Array.isArray(value) && 'hi' in value && 'lo' in value;
+}
+
+function cloneU64(value) {
+  return { hi: (Number(value.hi) || 0) >>> 0, lo: (Number(value.lo) || 0) >>> 0 };
+}
+
+function normalizeMailboxTicket(ticket) {
+  if (ticket == null || ticket === '') return '';
+  if (isU64Like(ticket)) return cloneU64(ticket);
+  return String(ticket);
+}
+
+function normalizeMailboxSeq(seq, fallbackNumber) {
+  if (isU64Like(seq)) return cloneU64(seq);
+  if (typeof seq === 'number' && Number.isFinite(seq)) return seq;
+  return fallbackNumber;
 }
 
 export class Mailbox {
@@ -81,13 +104,15 @@ export class Mailbox {
   }
 
   push(partial = {}) {
+    const nextSeq = this.seq + 1;
     const event = {
-      seq: this.seq + 1,
+      seq: normalizeMailboxSeq(partial.seq, nextSeq),
       kind: String(partial.kind ?? ''),
       source: String(partial.source ?? ''),
-      ticket: String(partial.ticket ?? ''),
+      ticket: normalizeMailboxTicket(partial.ticket),
       ts: Number.isFinite(partial.ts) ? Number(partial.ts) : Date.now(),
       payload: clonePayload(partial.payload),
+      target: partial.target ?? 'machine',
     };
     if (this.size === this.capacity) {
       this.tail = (this.tail + 1) & this.mask;
@@ -97,12 +122,12 @@ export class Mailbox {
     this.slots[this.head] = event;
     this.head = (this.head + 1) & this.mask;
     this.size += 1;
-    this.seq = event.seq;
+    this.seq = nextSeq;
     this.pushed += 1;
     this.recentBuf.push(event);
     if (this.recentBuf.length > this.recentLimit) this.recentBuf.splice(0, this.recentBuf.length - this.recentLimit);
     if (this.autoDrain) this._scheduleDrain();
-    return { ok: true, seq: event.seq, dropped: this.dropped, size: this.size };
+    return { ok: true, seq: nextSeq, dropped: this.dropped, size: this.size };
   }
 
   drain(callback) {
