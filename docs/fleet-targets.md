@@ -134,7 +134,7 @@ Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW
 | id | hardware | OS | tok/s | reset / backup ROM | programmable |
 |---|---|---|---|---|---|
 | **shalom** | Ryzen 5 **7520U** 4C/8T Mendocino 15 W; Radeon **610M 2 CU** RDNA2 (no matrix); **16 GB**; Win11 Home | Win11 | **48 meas** CPU ngl0 tg8 (Vulkan tg8 **8.4**) | N/A (PC; git) | live GRZ |
-| **qodesh** | Athlon II X2; 8600 GT 224 MB sm_1.1; 16 GB DDR3 | Win11 | **3.0 meas** (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ |
+| **qodesh** | Athlon II X2; **8600 GT 224 MB sm_1.1 — no GGUF GPU**; 16 GB DDR3 | Win11 | **3.0 meas** CPU (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ **CPU-only** |
 | **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 est | FreeBSD install media / ZFS bootenv if set | CPU then GL |
 | **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 est | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
 | **note9** | **SM-N960U** `crownqltesq`; **SDM845**; Adreno 630 (GLES 3.2); 8× Kryo; **5.7 GB**; Android 10 / API 29; serial `27841130ae1c7ece` | Android 10 | 8–15 est | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+OpenCL/Vulkan |
@@ -199,7 +199,7 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 | **pixel8** | EdgeTPU | TFLite sidecar |
 | **pixel8** | Titan M2 / modem | No GGUF |
 | **shalom** | 610M 2 CU RDNA2 | **4B/7B**, not 0.5B (CPU wins 0.5B gen) |
-| **qodesh** | 8600 GT shaders | Ancient |
+| **qodesh** | 8600 GT | **Do not use for GGUF** (see GPU note) |
 | **QD65NF** | Mali-G52 + T-Con | GLES maybe |
 | Storage | SSD R5/R8; **DVD/BD** drive MCU (MediaTek/ESS/Realtek — well-hacked firmware scene) | Stream/ripping DSP; not GGUF. DVD = practice + maybe stream decode assist |
 | **CKS5TW / J3B / IMW1202** | BT audio SoC | CE exploit practice only |
@@ -288,6 +288,22 @@ Scripts: `scripts/android-sdk-ndk.ps1` then `scripts/android-cross-build.ps1` �
 - [x] note9 ADB — **SM-N960U SDM845 Adreno 630** (was charge-only cable + RSA Allow)
 
 SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
+
+---
+
+## qodesh GPU — strong reconsider (2026-08-29)
+
+**Fact:** `llama-server --list-devices` → **`(none)`**. Card is **GeForce 8600 GT**, driver `9.18.13.4192`, **~256 MB** reported VRAM, compute **sm_1.1**.
+
+| Idea | Verdict |
+|---|---|
+| Put **0.5B / 4B / 7B GGUF** on the 8600 | **No.** VRAM ≪ model; no Vulkan device; sm_1.1 is not a modern GGML path. |
+| `agents.windows.json` **vulkan-all / hybrid-12** on this box | **Wrong host.** Those profiles are for a real Vulkan GPU (shalom). On qodesh they must never win — CPU profiles only (`cpu-2` / `cpu-4`, `--device none`). |
+| Install CUDA 6.5 for sm_1.1 | **No.** Installer on disk only; Win11 + 8600 driver risk (see known-bugs). Still cannot hold 0.5B Q4 in 224 MB. |
+| Use GPU for **non-LLM** (OSD, mailbox, CE) | Only if we invent a tiny custom kernel; **not** a model choice. |
+| What models *for the GPU* then? | **None.** qodesh LLM = **CPU Athlon II** only. Better quality ⇒ better **CPU** weights (still Q4, tiny) or move work to **shalom**. |
+
+**Partition:** leave the 8600 for display. All GRZ agents on qodesh: **CPU mmap**, GGML_VULKAN irrelevant / force `--device none`. Do not chase GPU models for this chassis.
 
 ---
 
