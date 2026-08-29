@@ -91,7 +91,6 @@ function nexusThenSpecialists(nexusReplies, specialistFn) {
 }
 
 const imageAskAfterCpp = {
-  model: 'qwenstral-code-speculator',
   messages: [
     { role: 'user', content: 'write a C++ program about a hero who saves a village' },
     { role: 'assistant', content: '#include <iostream>\nint main() { std::cout << "hero"; }\n' },
@@ -251,7 +250,7 @@ test('consultNexus omits impractical aliases from AVAILABLE the way unused visio
     path: '/v1/chat/completions',
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: { model: 'tool-router-agent', messages: [{ role: 'user', content: 'write a python function named hello' }] },
+    body: { messages: [{ role: 'user', content: 'write a python function named hello' }] },
   });
   assert.equal(result.status, 200);
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');

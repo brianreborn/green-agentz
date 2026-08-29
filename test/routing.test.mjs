@@ -77,7 +77,7 @@ test('/tts is rejected on the chat path', () => {
   }, registry()), ValidationError);
 });
 
-test('text-only turns do not regex C++ or image intent; nexus decides', () => {
+test('an explicit text model remains selected across mixed text history', () => {
   const routed = routeRequest({
     model: 'qwenstral-code-speculator',
     messages: [
@@ -86,8 +86,8 @@ test('text-only turns do not regex C++ or image intent; nexus decides', () => {
       { role: 'user', content: 'Can you show me an image of how that hero might look?' },
     ],
   }, registry());
-  assert.equal(routed.effectiveAlias, null);
-  assert.equal(routed.reason, 'nexus');
+  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.reason, 'requested_alias');
 });
 
 test('lock_alias honors the requested specialist', () => {

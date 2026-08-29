@@ -226,13 +226,14 @@ export function hardRuleRoute(body, registry) {
   if (body?.model === MONITOR_ALIAS && registry.agents.has(MONITOR_ALIAS)) {
     return finish(body, registry, MONITOR_ALIAS, 'mailbox', modality);
   }
-  if (body?.lock_alias === true) {
-    const requested = body.model ?? null;
+  const requested = body?.model ?? null;
+  if (requested) {
+    const reason = body.lock_alias === true ? 'lock_alias' : 'requested_alias';
     if (requested === NEXUS_ALIAS && registry.agents.has(requested) && registry.status(requested).state !== 'unavailable') {
-      return finish(body, registry, requested, 'lock_alias', modality);
+      return finish(body, registry, requested, reason, modality);
     }
-    if (requested && isRoutableAlias(registry, requested)) {
-      return finish(body, registry, requested, 'lock_alias', modality);
+    if (isRoutableAlias(registry, requested)) {
+      return finish(body, registry, requested, reason, modality);
     }
   }
   return finish(body, registry, null, 'nexus', modality);
