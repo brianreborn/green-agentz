@@ -27,14 +27,11 @@ while ($true) {
   $outFile = Join-Path $Root 'data\local-ci-last.txt'
   $code = -1
   try {
-    # Avoid Tee-Object; expand glob ourselves (Start-Process won't).
-    $errFile = Join-Path $Root 'data\local-ci-node.err.txt'
     $tests = @(Get-ChildItem -Path (Join-Path $Root 'test\*.test.mjs') | ForEach-Object { $_.FullName })
     if ($tests.Count -eq 0) { throw 'no test\*.test.mjs files' }
-    $p = Start-Process -FilePath $Node -ArgumentList (@('--test') + $tests) `
-      -WorkingDirectory $Root -NoNewWindow -Wait -PassThru `
-      -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-    $code = $p.ExitCode
+    # Direct invoke — nested Start-Process+redirect was dying mid-suite.
+    & $Node --test @tests *> $outFile
+    $code = $LASTEXITCODE
     if ($null -eq $code) { $code = -2 }
   } catch {
     Write-Log ("test-runner-exception: " + $_.Exception.Message)
