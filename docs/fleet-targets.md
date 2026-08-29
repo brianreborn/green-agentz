@@ -291,6 +291,120 @@ SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 ---
 
+## Block layouts (all considered)
+
+Shared GRZ ports if a box ever hosts the gateway: `:8080` Node · `:8187` 0.5B resident · cold `:8183` code · `:8184` text · `:8181` vision.
+
+### SAX2V1R — Sercomm IP6442B · Spectrum Linux · no shell
+
+```
++---------------- eMMC (size unknown; dump first) ----------------+
+|  U-Boot (dual slots on cousins; SAX2 unconfirmed)               |
+|  Spectrum rootfs  (app-locked; warehouse CGI cousins only)      |
+|  [AP CPU] A53-class?  -- worker IF freed AND ≥1 GB DRAM         |
+|  [NSS / Wi-Fi 6E] packet offload -- not GGUF                    |
+|  UART  (cousin SAX1V1R: GND TX 3.3 RX; CLK-glitch → U-Boot)     |
++---------------- 12 V  ·  ≠ SAX1 IPQ8072A 2 GB ------------------+
+  GRZ: none until UART. Do not flash SAX1 images.
+```
+
+### EN2251 — Hitron EN2251-RES · Puma 7 · modem (not gateway)
+
+```
++---------------- eMMC  (dump before write) ----------------------+
+|  [APP CPU] dual Atom  -- the worker IF ≥1 GB free               |
+|  [NP / MAC] ARM DOCSIS  -- not GGUF                             |
+|  Voice DSP / 2.5GbE  -- leave alone                             |
+|  Public door: 192.168.100.1  (ISP may lock)                     |
+|  Cousin: button-hold nonpcpu serial/telnet (Puma 6 Hitron)      |
++---------------- 12 V 2 A  max 16.93 W --------------------------+
+  GRZ: none. RAM gate — many Puma 7 modem boards <1 GB → tok/s=0.
+```
+
+### TU7000 — Crystal Processor 4K · Tizen 5.5
+
+```
++---------------- eMMC / Tizen partitions ------------------------+
+|  Tizen 5.5  (keep TV apps)                                      |
+|  [ARM 4c] Crystal 4K  -- 0.5B only if SDB root + RAM enough     |
+|  Display pipeline  -- panel watts dominate J/tok                |
+|  Public door: developer mode + SDB (Bishop Fox on TU700D)       |
+|  Reset: Samsung USB firmware / factory                          |
++-----------------------------------------------------------------+
+  GRZ: none yet. Worker beside Tizen, not instead of.
+```
+
+### E472VLE — VIA 2012 · Yahoo widgets
+
+```
++---------------- NAND/SPI  (scarce stock ROM — dump first) ------+
+|  2012 VIA SoC + Yahoo widget runtime                            |
+|  USB MERGE.bin-style updates on some Vizios                     |
+|  UART / IR service  -- era cmd-inject cousins, not this SKU     |
++-----------------------------------------------------------------+
+  GRZ: none. 0.5B marginal (0.2–1 hyp).
+```
+
+### QD65NF — 55QD65NF · MT9602 · Fire TV · ≤2 GB
+
+```
++---------------- SoC DRAM ≤ 2 GB --------------------------------+
+|  Fire OS  (keep)                                                |
+|  ADB / unknown sources  -- Termux 0.5B TIGHT after OS           |
+|  Mali-G52  -- GLES maybe later                                  |
+|  T-Con / panel 125 W  -- not a worker                           |
++-----------------------------------------------------------------+
+  GRZ: ADB userland only. No Magisk for this Fire OEM SKU.
+```
+
+### K243Y — Acer FHD scaler MCU
+
+```
++---------------- scaler SRAM/flash ------------------------------+
+|  OSD MCU  -- HDMI DDC/CI / factory UART silk                    |
+|  no Linux, no mmap, no GGUF                                     |
++-----------------------------------------------------------------+
+  GRZ: none. CE practice / 0 tok/s.
+```
+
+### IMW1202 — HydraJolt BT speaker
+
+```
++---------------- BT audio MCU + SPI -----------------------------+
+|  A2DP/AVRCP/GATT  · charge USB                                  |
+|  OTA characteristic / companion app  -- CE practice             |
++-----------------------------------------------------------------+
+  GRZ: none.
+```
+
+### CKS5TW — ATH-CKS5TW TWS · FCC JFZCKS5TWR · aptX
+
+```
++-- bud SoC --+ +-- bud SoC --+ +------ case DFU / USB ------+
+|  aptX/cVc   | |  aptX/cVc   | |  DFU master; dump all three |
++-------------+ +-------------+ +----------------------------+
+  GRZ: none. Qualcomm audio path practice only.
+```
+
+### J3B — FCC V3J-J3B (confirm silk: Jawbone dongle vs JieLi TWS)
+
+```
++---------------- BT / USB DFU -----------------------------------+
+|  If Jawbone dongle: CSR-class USB DFU                           |
+|  If generic J3 TWS: JieLi flash tools                           |
++-----------------------------------------------------------------+
+  GRZ: none.
+```
+
+### Storage secondaries (named when present)
+
+```
+SSD FTL MCU     -- not tok/s
+DVD/BD (MTK/ESS/Realtek)  -- firmware practice; stream DSP maybe
+```
+
+---
+
 ## Next
 
 1. Finish shalom live agent gate (`curl.exe` `/route` + 8-tok) **before** any phone copy  
