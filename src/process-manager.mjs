@@ -158,6 +158,12 @@ export class ProcessManager {
           ...(agent.draft_args ?? []),
         );
       }
+      // Default the KV cache to q8_0 (near-lossless, ~half the KV bytes) unless a
+      // profile/agent already chose. Big lever on a memory-tight box; opt out
+      // per-agent with kv_cache: "f16".
+      const kv = profile?.kv_cache ?? agent.kv_cache ?? 'q8_0';
+      if (kv !== 'f16' && !args.includes('--cache-type-k')) args.push('--cache-type-k', kv);
+      if (kv !== 'f16' && !args.includes('--cache-type-v')) args.push('--cache-type-v', kv);
     } else if (runtime.kind === 'whisper-server') {
       args.push('--port', String(agent.port), '--model', agent.model, ...(profile?.args ?? []));
     } else if (runtime.kind === 'stable-diffusion') {

@@ -199,6 +199,18 @@ export class Gateway {
       role: 'green-roomz',
     });
     this.logger = logger ?? createLogger();
+    this.extraPeers = [];
+  }
+
+  /** Static manifest allow_peers plus any injected at launch (e.g. by the adb harness). */
+  effectivePeers() {
+    return [...(this.manifest.gateway.allow_peers ?? []), ...this.extraPeers];
+  }
+
+  /** Launch harness hook: trust these peer IPs/CIDRs for this process only. */
+  addPeers(peers = []) {
+    for (const p of peers) if (p && !this.extraPeers.includes(p)) this.extraPeers.push(String(p));
+    return this.effectivePeers();
   }
 
   bindAddress(host) {
@@ -210,7 +222,7 @@ export class Gateway {
       // Binding to a specific LAN address is allowed when an explicit peer
       // allowlist is set (the allowlist is the gate) OR an API key is configured.
       // Binding to 0.0.0.0/:: (every interface) still needs the explicit override.
-      const gated = allowPeers.length > 0 || Boolean(this.apiKey);
+      const gated = allowPeers.length > 0 || this.extraPeers.length > 0 || Boolean(this.apiKey);
       if (bindAll && process.env.GREEN_ROOMZ_ALLOW_PUBLIC !== '1') {
         throw new ValidationError('Binding to all interfaces requires GREEN_ROOMZ_ALLOW_PUBLIC=1; prefer a specific host + gateway.allow_peers');
       }
@@ -236,7 +248,7 @@ export class Gateway {
     const url = new URL(request.url, 'http://127.0.0.1');
     try {
       const remote = request.socket?.remoteAddress;
-      if (!peerAllowed(remote, this.manifest.gateway.allow_peers ?? [])) {
+      if (!peerAllowed(remote, this.effectivePeers())) {
         return jsonResponse(response, 403, { error: { message: 'Peer not allowed', type: 'forbidden_peer' } }, cors);
       }
       const identity = identityFrom(request, this.apiKey);

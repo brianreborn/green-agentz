@@ -264,3 +264,23 @@ test('startIdleSweeper is a no-op when idle eviction is disabled', () => {
   manager.startIdleSweeper();
   assert.equal(manager.idleSweeper, null);
 });
+
+test('buildLaunch defaults the KV cache to q8_0, honours an explicit profile choice, and f16 opt-out', () => {
+  const manifest = sampleManifest();
+  const agent = manifest.agents.find((item) => item.alias === 'tool-router-agent');
+  const registry = new AgentRegistry(manifest);
+  const manager = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('no spawn'); } });
+
+  const dflt = manager.buildLaunch(agent, { id: 'cpu-2', args: ['--device', 'none'] });
+  assert.deepEqual(
+    [dflt.args[dflt.args.indexOf('--cache-type-k') + 1], dflt.args[dflt.args.indexOf('--cache-type-v') + 1]],
+    ['q8_0', 'q8_0'],
+  );
+
+  const explicit = manager.buildLaunch(agent, { id: 'cpu-2', args: ['--device', 'none', '--cache-type-k', 'q4_0', '--cache-type-v', 'q4_0'] });
+  assert.equal(explicit.args.filter((a) => a === '--cache-type-k').length, 1);
+  assert.equal(explicit.args[explicit.args.indexOf('--cache-type-k') + 1], 'q4_0');
+
+  const f16 = manager.buildLaunch({ ...agent, kv_cache: 'f16' }, { id: 'cpu-2', args: ['--device', 'none'] });
+  assert.equal(f16.args.includes('--cache-type-k'), false);
+});

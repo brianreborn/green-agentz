@@ -117,6 +117,10 @@ async function cmdServe(ctx, args) {
     await applyStoreWinners(ctx.processes, { objective });
   } catch {}
   const gateway = new Gateway(ctx);
+  // Launch harness may inject trusted peer IPs (e.g. deploy/adb-peer.mjs resolves
+  // the one adb-attached Android device's shared-subnet IP). Repeatable.
+  const injectedPeers = args.reduce((acc, a, i) => (a === '--allow-peer' && args[i + 1] ? [...acc, args[i + 1]] : acc), []);
+  if (injectedPeers.length) console.error(`allow-peer: ${gateway.addPeers(injectedPeers).join(', ')}`);
   const server = await gateway.listen(argValue(args, '--host'), argValue(args, '--port'));
   const address = server.address();
   console.error(`green-roomz listening on http://${address.address}:${address.port}`);
