@@ -314,28 +314,19 @@ SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 ### Ship commitment - what the 8600 will do
 
-Shipping without a useful GPU role fails. **Both** bars below are required to ship (operator call 2026-08-29). If we cannot land **security-monitor / mailbox cores** on sm_1.1, that is an engineering failure — those are tiny, bounded kernels on a card we already own.
-
-**A. Floor (must not fail): security-monitor / mailbox CUDA cores on sm_1.1**
+**Useful enough to ship the GPU story:** run **most of the security-monitor path on the 8600 GT** (CUDA 6.5 / sm_1.1). That alone counts. If we cannot do that, we failed the easy engineering proof.
 
 | Piece | Spec |
 |---|---|
-| Binary | Our CUDA **6.5 / compute_11** build (same toolchain as LLM path) |
-| Work | Copy-engine or host-memcpy slot per audit **F3/F21**; seq as `{hi,lo}` on sm_1.1; payload hash / ring scrub / non-blocking push assist — **GPU MUST NOT list** (audit): private slot, not a model list |
-| Useful = | Hot path uses the 8600 for at least one monitor/mailbox op under load; CPU fallback remains correct if GPU absent |
+| Binary | Our CUDA **6.5 / compute_11** build (VS2013 + staged toolkit; careful Win11 driver story) |
+| Work | Majority of monitor/mailbox hot path on GPU: copy-engine or host-memcpy slot (**F3/F21**), seq `{hi,lo}`, push/drain assist, payload hash / ring scrub — **GPU MUST NOT list** (private slot, not a model roster) |
+| Useful = | Under load, most monitor ops hit the 8600; CPU fallback still correct if GPU absent |
 
-**B. Also required to ship: partial 0.5B Q4 offload**
+**Optional later (not required to call the GPU useful):** partial 0.5B Q4 `n-gpu-layers` offload on the same toolchain. Nice if tok/s >= CPU-only; not the usefulness bar.
 
-| Piece | Spec |
-|---|---|
-| Binary | Same sm_1.1 `llama-server` / ggml-cuda (not stock Vulkan b10665) |
-| Model | Existing `Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` only |
-| Placement | DDR3 mmap + `n-gpu-layers` fitted to ~180 MB VRAM |
-| Useful = | GPU busy during completion; tok/s **>= CPU-only** on the same short prompt |
+**Non-goals on 224 MB:** whole chat models in VRAM; Vulkan lighting up; vision/whisper/sd on this card.
 
-**Non-goals on 224 MB:** whole 0.5B/4B/7B in VRAM; Vulkan device list; vision/whisper/sd on this GPU.
-
-**Order:** CPU nexus stays live -> CUDA 6.5 + VS2013 toolchain (careful driver) -> **(A) monitor/mailbox cores first** (proves the card) -> **(B) tune n-gpu-layers** -> both green before "qodesh GPU shipped."
+**Order:** CPU nexus stays live -> CUDA 6.5 toolchain -> **monitor-on-8600** -> (optional) 0.5B partial offload.
 
 ## Block layouts (all considered)
 
