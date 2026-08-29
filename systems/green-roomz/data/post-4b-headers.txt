@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+x-session-id: 047d21f7-6885-4e77-89ec-c0fc385f95c7
+x-green-roomz-requested-alias: general-text-speculator
+x-green-roomz-effective-alias: general-text-speculator
+x-green-roomz-route-reason: requested_alias
+access-control-allow-origin: 
+content-length: 759
+content-type: application/json; charset=utf-8
+server: llama.cpp
+Date: Fri, 28 Aug 2026 17:02:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

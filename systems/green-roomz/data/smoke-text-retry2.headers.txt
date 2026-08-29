@@ -1,0 +1,11 @@
+HTTP/1.1 500 Internal Server Error
+x-session-id: 7ab797e7-6ab4-44b2-8715-773eed515d26
+x-green-roomz-requested-alias: general-text-speculator
+x-green-roomz-effective-alias: general-text-speculator
+x-green-roomz-route-reason: requested_alias
+content-type: application/json; charset=utf-8
+content-length: 60
+Date: Fri, 28 Aug 2026 18:46:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
