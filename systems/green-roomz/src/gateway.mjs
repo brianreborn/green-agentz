@@ -209,7 +209,11 @@ export class Gateway {
         return jsonResponse(response, 200, {
           product: 'Green-Roomz',
           policy: this.policy.policy,
-          native_capabilities_are_truthful: true,
+          capability_reporting: {
+            native_capabilities: 'declared',
+            callable_capabilities: 'runtime_checked',
+            ready_capabilities: 'loaded_now',
+          },
           models: this.registry.listModels(),
         }, cors);
       }
