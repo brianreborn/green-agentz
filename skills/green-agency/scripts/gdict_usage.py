@@ -154,8 +154,16 @@ def write_exports(cfg, filt, win, agg):
         span = max(0, max(ts) - min(ts))
     payload = {"schema_version": SCHEMA, "computed_ts": now(), "filter": filt, "window_seconds": cfg["window_seconds"], "window_messages": cfg["window_messages"], "window_mode": cfg["window_mode"], "span_seconds": span, "rate_saved_per_s": round(agg["saved"] / max(1, span or cfg["window_seconds"]), 6), "aggregate": agg, "buckets": _buckets(win, cfg)}
     wp = runtime() / "gdict-usage-window.json"
-    tmp = wp.with_suffix(".tmp"); tmp.write_text(json.dumps(payload) + "\n"); tmp.replace(wp)
-    lines = ["# TYPE gdict_usage_pre_tokens gauge", "# TYPE gdict_usage_post_tokens gauge", "# TYPE gdict_usage_saved_tokens gauge", "# TYPE gdict_usage_hits gauge", "# TYPE gdict_usage_window_events gauge", f'gdict_usage_window_events {agg["n"]}', f'gdict_usage_window_seconds {cfg["window_seconds"]}', f'gdict_usage_window_messages {cfg["window_messages"]}']
+    tmp = wp.with_suffix(".tmp"); tmp.write_text(json.dumps(payload) + "\n", newline="\n"); tmp.replace(wp)
+    # OpenMetrics 1.0 exposition: every family TYPEd before its samples, LF only, "# EOF" terminator.
+    lines = []
+    for metric in ("gdict_usage_pre_tokens", "gdict_usage_post_tokens", "gdict_usage_saved_tokens",
+                   "gdict_usage_hits", "gdict_usage_window_events", "gdict_usage_window_seconds",
+                   "gdict_usage_window_messages"):
+        lines.append(f"# TYPE {metric} gauge")
+    lines.append(f'gdict_usage_window_events {agg["n"]}')
+    lines.append(f'gdict_usage_window_seconds {cfg["window_seconds"]}')
+    lines.append(f'gdict_usage_window_messages {cfg["window_messages"]}')
     for d, st in agg["by_direction"].items():
         lines.append(f'gdict_usage_pre_tokens{{direction="{d}",role="",provider=""}} {st["pre"]}')
         lines.append(f'gdict_usage_post_tokens{{direction="{d}",role="",provider=""}} {st["post"]}')
@@ -165,8 +173,9 @@ def write_exports(cfg, filt, win, agg):
         lines.append(f'gdict_usage_post_tokens{{direction="",role="",provider="{name}"}} {st["post"]}')
         lines.append(f'gdict_usage_saved_tokens{{direction="",role="",provider="{name}"}} {st["pre"]-st["post"]}')
         lines.append(f'gdict_usage_hits{{provider="{name}"}} {st["hits"]}')
+    lines.append("# EOF")
     pp = runtime() / "gdict-usage.prom"
-    tmpp = pp.with_suffix(".tmp"); tmpp.write_text("\n".join(lines) + "\n"); tmpp.replace(pp)
+    tmpp = pp.with_suffix(".tmp"); tmpp.write_text("\n".join(lines) + "\n", newline="\n"); tmpp.replace(pp)
 
 def cmd_usage(filt: str) -> int:
     cfg = load_cfg(); events = load_events(); win = windowed(events, cfg)
