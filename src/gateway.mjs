@@ -689,6 +689,14 @@ export class Gateway {
           signal: request.abortSignal,
         });
 
+        if (peek.degraded === 'peek_timeout' && !peek.handoff) {
+          visited.add(alias);
+          hops.push(alias);
+          notes.push(stripControls(`${alias} did not emit within the peek window`));
+          this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'peek_timeout' } });
+          continue;
+        }
+
         if (peek.handoff) {
           const suggest = peek.handoff.suggest && peek.handoff.suggest !== 'null' ? peek.handoff.suggest : null;
           notes.push(stripControls(peek.handoff.reason ?? 'handoff'));
@@ -724,8 +732,26 @@ export class Gateway {
     const address = this.bindAddress(host);
     const listenPort = Number(port ?? this.manifest.gateway.port ?? 8080);
     const server = createServer((req, res) => {
-      Promise.resolve(this.handle(req, res)).catch((error) => { if (!res.headersSent) jsonResponse(res, 500, { error: { message: String(error.message), type: 'internal_error' } }); });
+      // A dead client socket must not take the process down mid-write.
+      req.on('error', () => {});
+      res.on('error', () => {});
+      Promise.resolve(this.handle(req, res)).catch((error) => {
+        try {
+          if (!res.headersSent) {
+            jsonResponse(res, 500, { error: { message: redact(String(error?.message ?? error)), type: 'internal_error' } });
+          } else if (!res.writableEnded) {
+            res.destroy(error instanceof Error ? error : new Error(String(error)));
+          }
+        } catch { /* socket already gone */ }
+      });
     });
+    // Malformed HTTP from a client is a 400, never a crash.
+    server.on('clientError', (_error, socket) => {
+      if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      else socket.destroy();
+    });
+    server.headersTimeout = this.manifest.gateway.headers_timeout_ms ?? 30_000;
+    server.requestTimeout = this.manifest.gateway.request_timeout_ms ?? 0;
     return new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(listenPort, address, () => resolve(server));

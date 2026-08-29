@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { proxyJson } from '../src/proxy.mjs';
+import { peekSpecialist } from '../src/handoff.mjs';
 import { deadlineSignal, isTimeoutAbort, readCappedText } from '../src/util.mjs';
 import { UpstreamProtocolError, UpstreamTimeoutError } from '../src/errors.mjs';
 
@@ -107,6 +108,43 @@ test('a caller cancel is re-thrown as-is, never masked as a timeout', async () =
   });
   caller.abort(new Error('client hung up'));
   await assert.rejects(() => p, (e) => !(e instanceof UpstreamTimeoutError));
+});
+
+// --- handoff peek hardening ----------------------------------------------
+
+test('peekSpecialist gives up on a specialist that never emits, marking it degraded', async () => {
+  const started = Date.now();
+  const neverEmits = new ReadableStream({ start() { /* no enqueue, no close */ } });
+  const peek = await peekSpecialist({
+    fetchImpl: async () => ({ status: 200, headers: new Headers({ 'content-type': 'text/event-stream' }), body: neverEmits }),
+    request: { method: 'POST', headers: {} },
+    target: 'http://127.0.0.1:9/v1/chat/completions',
+    body: { model: 'qwenstral-code-speculator', messages: [] },
+    peekTimeoutMs: 60,
+  });
+  assert.ok(Date.now() - started < 2000, 'must not hang');
+  assert.equal(peek.degraded, 'peek_timeout');
+  assert.equal(peek.reader, null, 'dead stream is not handed downstream');
+  assert.equal(peek.finished, true);
+});
+
+test('peekSpecialist still returns a fast handoff before the deadline', async () => {
+  const sse = new ReadableStream({
+    start(c) {
+      c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"HANDOFF not my job"},"finish_reason":"stop"}]}\n\n'));
+      c.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+      c.close();
+    },
+  });
+  const peek = await peekSpecialist({
+    fetchImpl: async () => ({ status: 200, headers: new Headers({ 'content-type': 'text/event-stream' }), body: sse }),
+    request: { method: 'POST', headers: {} },
+    target: 'http://127.0.0.1:9/v1/chat/completions',
+    body: { model: 'qwenstral-code-speculator', messages: [] },
+    peekTimeoutMs: 5000,
+  });
+  assert.equal(peek.handoff?.handoff, true);
+  assert.match(peek.handoff.reason, /not my job/);
 });
 
 test('an already-ended response short-circuits without writing again', async () => {
