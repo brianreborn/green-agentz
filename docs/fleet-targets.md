@@ -312,6 +312,30 @@ SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 **Partition:** display on 8600; LLM = CPU **today**; GPU returns when **our** CUDA 6.5 build lights up devices, not when Vulkan does.
 
+### Ship commitment - what the 8600 will do
+
+Shipping without a useful GPU role fails. The card is **not** required to hold a whole chat model. It **is** required to be on the inference critical path via CUDA 6.5 / sm_1.1.
+
+**1. Primary (must ship): CUDA 6.5 / sm_1.1 GGML path for the existing 0.5B Q4**
+
+| Piece | Spec |
+|---|---|
+| Binary | Our build of `llama-server` (ggml-cuda) with **compute_11 / CUDA 6.5**, not stock Vulkan b10665 |
+| Model | **Same** `Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` — existing small, no new family |
+| Placement | Weights mostly **DDR3 mmap**; GPU gets **as many layers/ops as fit in ~180 MB** after context (`n-gpu-layers` tuned, not `all`) |
+| Runtime | Qodesh profile e.g. `cuda11-partial` beside `cpu-2`; Vulkan profiles stay off this host |
+| Useful = | During a short completion the GPU is **busy** and prompt or gen tok/s is **>= CPU-only** on the same prompt (no regression) |
+
+**2. Secondary (if layer offload slips): fixed sm_1.1 kernels in GRZ**
+
+Same toolchain. GPU runs a small always-on job already on the path (e.g. mailbox payload hash / one ubatch Q4 dequant streamed from host). Counts as useful work; does **not** replace (1).
+
+**3. Non-goals on 224 MB**
+
+Full 0.5B/4B/7B in VRAM; stock Vulkan lighting up; image-gen/whisper/big vision on this GPU.
+
+**Order:** CPU nexus stays live -> CUDA 6.5 toolchain (VS2013 + staged installer, careful driver) -> build sm_1.1 ggml -> tune `n-gpu-layers` until (1) passes -> then qodesh GPU is shippable.
+
 ## Block layouts (all considered)
 
 Shared GRZ ports if a box ever hosts the gateway: `:8080` Node · `:8187` 0.5B resident · cold `:8183` code · `:8184` text · `:8181` vision.
