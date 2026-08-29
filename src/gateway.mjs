@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
 import { Mailbox } from './mailbox.mjs';
+import { CAP, MonitorIpc } from './monitor/ipc.mjs';
+import { createLogger } from './monitor/logger.mjs';
 import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
 import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
@@ -22,6 +24,9 @@ const EXPLICIT_ROUTES = new Set([
   '/v1/embeddings',
   '/v1/rerank',
 ]);
+
+/** 8080 may post/observe hops. No vote / lockdown / reboot / respond rights. */
+export const GATEWAY_IPC_RIGHTS = (CAP.POST | CAP.OBSERVE | CAP.SNAPSHOT) >>> 0;
 
 function identityFrom(request, apiKey) {
   const header = request.headers.authorization ?? '';
@@ -105,7 +110,7 @@ function isChatPath(pathname) {
 }
 
 export class Gateway {
-  constructor({ manifest, registry, processes, sessions, policy, hostAdapter, fetchImpl, mailbox }) {
+  constructor({ manifest, registry, processes, sessions, policy, hostAdapter, fetchImpl, mailbox, ipc, logger }) {
     this.manifest = manifest;
     this.registry = registry;
     this.processes = processes;
@@ -116,6 +121,11 @@ export class Gateway {
     this.apiKey = process.env.GREEN_ROOMZ_API_KEY || '';
     this.startedAt = Date.now();
     this.mailbox = mailbox ?? new Mailbox();
+    this.ipc = ipc ?? new MonitorIpc({
+      rightsMask: GATEWAY_IPC_RIGHTS,
+      role: 'green-roomz',
+    });
+    this.logger = logger ?? createLogger();
   }
 
   bindAddress(host) {
@@ -152,7 +162,12 @@ export class Gateway {
         return jsonResponse(response, 200, this.health(), cors);
       }
       if (url.pathname === '/v1/monitor/recent') {
-        return jsonResponse(response, 200, { object: 'list', data: this.mailbox.recent(), stats: this.mailbox.stats() }, cors);
+        return jsonResponse(response, 200, {
+          object: 'list',
+          data: this.mailbox.recent(),
+          stats: this.mailbox.stats(),
+          ipc: { data: this.ipc.recent(), stats: this.ipc.stats() },
+        }, cors);
       }
       if (url.pathname === '/v1/models') {
         return jsonResponse(response, 200, { object: 'list', data: this.registry.listModels() }, cors);
@@ -198,6 +213,7 @@ export class Gateway {
       policy: this.policy.policy,
       agents: models,
       mailbox: this.mailbox.stats(),
+      ipc: this.ipc.stats(),
     };
   }
 
@@ -226,6 +242,18 @@ export class Gateway {
         ticket: extra.ticket ?? '',
         payload: extra.payload ?? {},
       });
+    } catch {}
+    try {
+      this.ipc.observeHop(kind, source, extra);
+    } catch {}
+    try {
+      const emitted = this.logger.emit({
+        kind: kind || 'hop',
+        source: source ?? '',
+        ticket: extra.ticket ?? '',
+        payload: extra.payload ?? {},
+      }, { callerRole: 'ipc' });
+      if (emitted && typeof emitted.catch === 'function') emitted.catch(() => {});
     } catch {}
   }
 

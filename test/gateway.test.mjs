@@ -297,10 +297,14 @@ test('health includes mailbox stats and GET /v1/monitor/recent is cheap', async 
   const health = await request(server, { path: '/v1/health' });
   assert.equal(typeof health.body.mailbox.capacity, 'number');
   assert.equal(typeof health.body.mailbox.pushed, 'number');
+  assert.equal(health.body.ipc.copyOnly, true);
+  assert.equal(typeof health.body.ipc.hot.pushed, 'number');
   const recent = await request(server, { path: '/v1/monitor/recent' });
   assert.equal(recent.status, 200);
   assert.ok(Array.isArray(recent.body.data));
   assert.equal(typeof recent.body.stats.dropped, 'number');
+  assert.ok(Array.isArray(recent.body.ipc.data));
+  assert.equal(typeof recent.body.ipc.stats.hot.pushed, 'number');
 });
 
 test('completion hop pushes to mailbox without awaiting drain', async (t) => {
@@ -312,6 +316,7 @@ test('completion hop pushes to mailbox without awaiting drain', async (t) => {
     }),
   });
   const before = gateway.mailbox.stats().pushed;
+  const beforeIpc = gateway.ipc.stats().hot.pushed;
   const result = await request(server, {
     path: '/v1/chat/completions',
     method: 'POST',
@@ -320,9 +325,15 @@ test('completion hop pushes to mailbox without awaiting drain', async (t) => {
   });
   assert.equal(result.status, 200);
   assert.ok(gateway.mailbox.stats().pushed > before);
+  assert.ok(gateway.ipc.stats().hot.pushed > beforeIpc);
   const last = gateway.mailbox.recent(1)[0];
   assert.equal(last.kind, 'success');
   assert.equal(last.source, 'qwenstral-code-speculator');
+  assert.equal(typeof last.seq, 'number');
+  assert.equal(typeof last.ticket, 'string');
+  const lastIpc = gateway.ipc.recent(1)[0];
+  assert.equal(lastIpc.kind, 'success');
+  assert.equal(lastIpc.source, 'qwenstral-code-speculator');
 });
 
 test('POST security-monitor-agent snapshots mailbox without consulting nexus', async (t) => {
@@ -334,6 +345,7 @@ test('POST security-monitor-agent snapshots mailbox without consulting nexus', a
     },
   });
   const before = gateway.mailbox.stats().pushed;
+  const beforeIpc = gateway.ipc.stats().hot.pushed;
   const result = await request(server, {
     path: '/v1/chat/completions',
     method: 'POST',
@@ -347,13 +359,17 @@ test('POST security-monitor-agent snapshots mailbox without consulting nexus', a
   assert.equal(snapshot.runtime, 'logical');
   assert.equal(snapshot.alias, 'security-monitor-agent');
   assert.ok(gateway.mailbox.stats().pushed > before);
+  assert.ok(gateway.ipc.stats().hot.pushed > beforeIpc);
   assert.equal(fetches, 0);
   const recent = await request(server, { path: '/v1/monitor/recent' });
   assert.equal(recent.status, 200);
   assert.ok(recent.body.stats.pushed > 0);
   assert.equal(recent.body.data.at(-1).source, 'security-monitor-agent');
+  assert.ok(recent.body.ipc.stats.hot.pushed > 0);
+  assert.equal(recent.body.ipc.data.at(-1).source, 'security-monitor-agent');
   const health = await request(server, { path: '/health' });
   assert.ok(health.body.mailbox.pushed > 0);
+  assert.ok(health.body.ipc.hot.pushed > 0);
 });
 
 test('lock_alias pins a tiny prompt to the resident 0.5B nexus', async (t) => {
@@ -423,4 +439,31 @@ test('impractical specialist is not started; completion stays on the resident ne
   assert.equal(ensured.includes('qwenstral-code-speculator'), false);
   assert.ok(elapsed < 2000, `resident fallback took ${elapsed}ms`);
   assert.equal(urls.every((url) => url.includes('18187')), true);
+});
+
+test('observeHop posts mailbox and ipc; logger emit throw is swallowed', () => {
+  const manifest = sampleManifest();
+  const registry = new AgentRegistry(manifest);
+  const gateway = new Gateway({
+    manifest,
+    registry,
+    processes: new ProcessManager({ manifest, registry }),
+    sessions: new SessionLedger(),
+    policy: new PolicyGate('maximize'),
+    logger: {
+      emit() { throw new Error('logger boom'); },
+    },
+  });
+  gateway.observeHop('success', 'general-text-speculator', {
+    ticket: 's1',
+    payload: { hops: ['general-text-speculator'] },
+  });
+  assert.equal(gateway.mailbox.stats().pushed, 1);
+  assert.equal(gateway.ipc.stats().hot.pushed, 1);
+  const [mail] = gateway.mailbox.recent(1);
+  assert.equal(typeof mail.seq, 'number');
+  assert.equal(mail.ticket, 's1');
+  const [ipcEvent] = gateway.ipc.recent(1);
+  assert.equal(ipcEvent.kind, 'success');
+  assert.equal(ipcEvent.ticket, 's1');
 });
