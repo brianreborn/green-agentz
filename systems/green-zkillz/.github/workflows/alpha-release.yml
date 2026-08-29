@@ -1,0 +1,31 @@
+name: alpha-release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag
+        default: v0.1.0-alpha
+  push:
+    tags:
+      - 'v*-alpha'
+      - 'v*-alpha.*'
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create or update prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          if [ "${{ github.event_name }}" = "push" ]; then TAG="${GITHUB_REF_NAME}"; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file ALPHA.md --prerelease
+          else
+            gh release create "$TAG" --title "green-zkillz $TAG" --notes-file ALPHA.md --prerelease --generate-notes --target "${GITHUB_SHA}"
+          fi

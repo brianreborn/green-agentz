@@ -1,0 +1,10 @@
+{
+  "schema": "1.0.0",
+  "package": "green-zkillz",
+  "github_owner": "",
+  "github_repo": "",
+  "x_handle": "",
+  "skill_root_hint": "",
+  "workspace_env": "GREEN_WORKSPACE",
+  "notes": "Copy to $GREEN_WORKSPACE/.runtime/site.json. Empty strings mean ASK."
+}

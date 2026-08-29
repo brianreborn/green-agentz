@@ -1,0 +1,17 @@
+{
+  "title": "",
+  "version": "0.1.0",
+  "style": {
+    "diction": "high-density-technical",
+    "padding": "none",
+    "syntaxes": ["posix-shell", "c", "cpp", "rust", "python", "markdown", "json", "makefile"]
+  },
+  "chapters": [
+    {
+      "id": "ch-01",
+      "title": "",
+      "sources": [],
+      "prose": ""
+    }
+  ]
+}

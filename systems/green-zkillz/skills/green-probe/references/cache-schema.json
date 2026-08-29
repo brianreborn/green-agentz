@@ -1,0 +1,24 @@
+{
+  "cache_metadata": {
+    "schema_version": "1.0.0",
+    "last_probe_timestamp": 0,
+    "global_state_hash": ""
+  },
+  "environment_attestation": {
+    "host_tier": "STATELESS_CHAT",
+    "identity_posture": {
+      "asserted_blindness": false,
+      "attestation_mechanism": "NONE"
+    },
+    "capabilities": {
+      "file_system": "NONE",
+      "network_egress": false,
+      "execution_sandbox": "STATELESS"
+    }
+  },
+  "deduplication_registry": {
+    "file_systems": {},
+    "verified_dependencies": []
+  },
+  "short_circuit_tokens": {}
+}

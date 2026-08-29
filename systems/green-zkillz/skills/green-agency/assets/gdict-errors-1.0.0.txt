@@ -1,0 +1,44 @@
+GDICT/1
+ver=1.0.0
+kind=err
+# Exact-match compiler/diagnostic superstrings for TRIVIAL intern. No comments.
+c00  err  error: expected ';' before '}'
+c01  err  error: expected ';' before ')'
+c02  err  error: expected identifier or '('
+c03  err  error: expected expression
+c04  err  error: expected declaration
+c05  err  error: implicit declaration of function
+c06  err  error: undeclared identifier
+c07  err  error: use of undeclared identifier
+c08  err  error: conflicting types for
+c09  err  error: redefinition of
+c10  err  error: too few arguments to function
+c11  err  error: too many arguments to function
+c12  err  error: void value not ignored as it ought to be
+c13  err  error: lvalue required as left operand of assignment
+c14  err  error: no matching function for call to
+c15  err  error: cannot convert
+c16  err  error: expected class-name before
+c17  err  warning: unused variable
+c18  err  warning: unused parameter
+c19  err  warning: unused function
+c20  err  warning: comparison between signed and unsigned integer expressions
+c21  err  fatal error: No such file or directory
+c22  err  collect2: error: ld returned 1 exit status
+c23  err  make: *** [Makefile
+c24  err  Error 1
+c25  err  Error 2
+c26  err  syntax error
+c27  err  SyntaxError:
+c28  err  NameError:
+c29  err  TypeError:
+c30  err  AttributeError:
+c31  err  ImportError:
+c32  err  ModuleNotFoundError:
+c33  err  IndentationError:
+c34  err  Traceback (most recent call last):
+c35  err  panic:
+c36  err  undefined reference to
+c37  err  multiple definition of
+c38  err  recipe for target
+c39  err  No rule to make target

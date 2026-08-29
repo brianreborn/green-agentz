@@ -1,0 +1,55 @@
+GDICT/1
+ver=1.0.0
+# Static control-plane table — no human prose. Bootstrap for gdict-static.
+# id   kind   phrase
+e00  enum  STATELESS_CHAT
+e01  enum  AGY_SANDBOX
+e02  enum  SUPERGROK_ENGINE
+e10  enum  NONE
+e11  enum  SYSTEM_PROMPT_ENFORCED
+e12  enum  API_OAUTH_TOKEN
+e13  enum  CRYPTOGRAPHIC_ENCLAVE
+e20  enum  READ_ONLY
+e21  enum  READ_WRITE
+e30  enum  STATELESS
+e31  enum  ISOLATED_LINUX
+e32  enum  HOST_NATIVE
+p00  pref  STATUS
+p01  pref  ERROR_TOKEN
+p02  pref  ERROR_MUTATION_FAILED
+p03  pref  PIPELINE
+p04  pref  HOST
+p05  pref  ARTIFACTS
+p06  pref  ERRORS
+p07  pref  USAGE
+p08  pref  PROVIDER
+p09  pref  CONFIG_PROMPT
+p10  pref  DASHBOARD_PUSH_FAIL
+t00  tok   FS_PERMISSION_DENIED
+t01  tok   ERROR_MUTATION_FAILED
+t02  tok   WAVELET=SKIP
+k00  key   cache_metadata
+k01  key   environment_attestation
+k02  key   deduplication_registry
+k03  key   short_circuit_tokens
+k04  key   schema_version
+k05  key   last_probe_timestamp
+k06  key   global_state_hash
+r00  req   REQ-SYS-01
+r01  req   REQ-SYS-02
+r02  req   REQ-SYS-03
+r03  req   REQ-SYS-04
+r04  req   REQ-SYS-05
+r05  req   REQ-SYS-06
+r10  req   REQ-CODEC-10
+r11  req   REQ-CODEC-11
+r12  req   REQ-CODEC-12
+r13  req   REQ-CODEC-15
+r14  req   REQ-CODEC-16
+r15  req   REQ-CODEC-17
+s00  skill green-probe
+s01  skill green-bootstrap
+s02  skill green-ingest
+s03  skill green-format
+s04  skill green-deploy
+s05  skill green-agency
