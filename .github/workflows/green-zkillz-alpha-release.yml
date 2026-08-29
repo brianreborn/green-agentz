@@ -1,14 +1,14 @@
-name: alpha-release
+name: green-zkillz-alpha-release
 on:
   workflow_dispatch:
     inputs:
       tag:
         description: Release tag
-        default: v0.1.0-alpha
+        default: green-zkillz-v0.1.0-alpha
   push:
     tags:
-      - 'v*-alpha'
-      - 'v*-alpha.*'
+      - 'green-zkillz-v*-alpha'
+      - 'green-zkillz-v*-alpha.*'
 permissions:
   contents: write
 jobs:
@@ -25,7 +25,7 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           if [ "${{ github.event_name }}" = "push" ]; then TAG="${GITHUB_REF_NAME}"; fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file ALPHA.md --prerelease
+            gh release edit "$TAG" --notes-file docs/green-zkillz/ALPHA.md --prerelease
           else
-            gh release create "$TAG" --title "green-zkillz $TAG" --notes-file ALPHA.md --prerelease --generate-notes --target "${GITHUB_SHA}"
+            gh release create "$TAG" --title "green-zkillz $TAG" --notes-file docs/green-zkillz/ALPHA.md --prerelease --generate-notes --target "${GITHUB_SHA}"
           fi

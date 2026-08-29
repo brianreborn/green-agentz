@@ -1,14 +1,14 @@
 # Quick install — green-zkillz
 
 ```bash
-git clone https://github.com/brianreborn/green-agency.git
-cd green-agency
+git clone https://github.com/brianreborn/green-agentz.git
+cd green-agentz
 export GREEN_WORKSPACE="$PWD"
 export GDICT_STATIC="$PWD/skills/green-agency/assets"
 chmod +x skills/*/scripts/*.sh skills/green-agency/scripts/*.py
 ```
 
-Copy into the host skill dir (`~/.grok/skills/` on Grok):
+Copy into the suitable agent's skill directory:
 
 `skills/green-zkillz` plus `green-probe` `green-bootstrap` `green-ingest` `green-format` `green-deploy` `green-agency` (legacy).
 

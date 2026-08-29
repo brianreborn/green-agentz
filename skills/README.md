@@ -5,4 +5,4 @@ Package name: **green-zkillz**. Legacy folder `green-agency` still holds scripts
 Order: probe → bootstrap → ingest → format → deploy.
 Orchestrator: `green-zkillz/` (preferred) or `green-agency/` (alias).
 
-Install: repo-root `QUICK-INSTALL.md`.
+Install: `docs/green-zkillz/QUICK-INSTALL.md`.

@@ -15,10 +15,10 @@ Green-Agentz is the integration repository for the Green agent fleet.
   Sentinel, Council, and Warden boundaries require joint review before code is
   extracted from the historical Green-Roomz location.
 
-The existing `systems/green-zkillz` subtree is a provenance-preserving import
-of the repository currently hosted as `brianreborn/green-agency`. Its skill
-content will move into the Green-Agentz project layout after root-file and
-legacy-trigger conflicts are classified.
+The Green-Zkillz capability bundles live at `skills/`. Their imported history
+is retained from the repository currently hosted as
+`brianreborn/green-agency`; `green-agency` remains a compatibility trigger
+during migration.
 
 ## Host branches
 

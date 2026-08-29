@@ -1,4 +1,5 @@
-Package name: **green-zkillz**
+Capability-layer name: **Green-Zkillz**
 
-GitHub repo URL is still `brianreborn/green-agency` until you rename it in GitHub Settings.
+Project name: **Green-Agentz**. The imported history still originates from
+`brianreborn/green-agency` until the GitHub repository migration is performed.
 Legacy trigger: `green-agency`. Stages: `green-probe` … `green-deploy`.
