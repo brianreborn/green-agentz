@@ -103,7 +103,7 @@ test('manifest profile order is kept when weight size is unknown', () => {
   assert.deepEqual(ids, ['cpu-4', 'vulkan-all']);
 });
 
-test('start skips cpu-4 spawn when not admitted and uses vulkan-all instead', async () => {
+test('start spawns the preferred profile even under memory pressure (OS pages)', async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'grz-admit-start-'));
   const model = path.join(dir, 'model.gguf');
   writeFileSync(model, '');
@@ -135,9 +135,8 @@ test('start skips cpu-4 spawn when not admitted and uses vulkan-all instead', as
       fetchImpl: async () => ({ ok: true }),
     });
     const record = await manager.start(agent);
-    assert.equal(record.profileId, 'vulkan-all');
+    assert.equal(record.profileId, 'cpu-4', 'first profile is used; RAM math does not veto');
     assert.equal(spawned.length, 1);
-    assert.equal(spawned[0][spawned[0].indexOf('--device') + 1], 'Vulkan0');
     await manager.stop(agent.alias);
   } finally {
     rmSync(dir, { recursive: true, force: true });

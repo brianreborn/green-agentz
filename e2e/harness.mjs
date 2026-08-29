@@ -17,7 +17,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
-const REPO = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const REPO = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 
 const LLAMA_CANDIDATES = [
   process.env.GRZ_E2E_LLAMA,

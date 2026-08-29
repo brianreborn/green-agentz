@@ -36,17 +36,20 @@ export class AgentRegistry {
       for (const field of agent.required_artifacts ?? []) {
         if (!(await fileExists(agent[field]))) missing.push(`${field}:${agent[field] ?? '<unset>'}`);
       }
-      let state = missing.length ? 'unavailable' : agent.runtime === 'logical' ? 'ready' : 'cold';
+      const state = missing.length ? 'unavailable' : agent.runtime === 'logical' ? 'ready' : 'cold';
+      // Memory pressure never makes an agent unavailable - the OS pages. It is
+      // surfaced as a non-blocking advisory only.
+      let advisory;
       if (state === 'cold' && !isResidentAgent(agent)) {
         const admission = agentCanAdmit(agent, { freeMemoryBytes });
-        if (!admission.ok) {
-          state = 'unavailable';
-          missing.push(`impractical:${admission.reason}:estimate ${admission.estimateBytes} + headroom ${admission.headroomBytes} > free ${freeMemoryBytes}`);
+        if (admission.pressure === 'tight') {
+          advisory = `memory-tight: ~${admission.estimateBytes} est vs ${freeMemoryBytes} free (will page)`;
         }
       }
       this.availability.set(agent.alias, {
         state,
         missing,
+        ...(advisory ? { advisory } : {}),
       });
     }
     return this;

@@ -38,7 +38,7 @@ test('missing artifacts degrade only the affected alias', async () => {
   assert.equal(monitor.capability_readiness.loaded, true);
 });
 
-test('inspect marks a CPU-impractical specialist unavailable even with a vulkan profile', async () => {
+test('inspect keeps a memory-tight specialist available (OS pages), not unavailable', async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'grz-inspect-ram-'));
   const model = path.join(dir, 'model.gguf');
   writeFileSync(model, '');
@@ -57,8 +57,8 @@ test('inspect marks a CPU-impractical specialist unavailable even with a vulkan 
       hostAdapter: { sampleResources() { return { freeMemoryBytes: 1 }; } },
     });
     const status = registry.status('qwenstral-code-speculator');
-    assert.equal(status.state, 'unavailable');
-    assert.ok(status.missing.some((reason) => String(reason).startsWith('impractical')));
+    assert.notEqual(status.state, 'unavailable', 'tight RAM must not make it unavailable');
+    assert.ok(!(status.missing ?? []).some((reason) => String(reason).startsWith('impractical')));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
