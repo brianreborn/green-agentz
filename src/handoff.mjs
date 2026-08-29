@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { HANDOFF_PEEK_CHARS } from './constants.mjs';
+import { HANDOFF_PEEK_CHARS, HANDOFF_PEEK_TIMEOUT_MS, UPSTREAM_MAX_BUFFER_BYTES } from './constants.mjs';
 import { sanitizeCompletionJson } from './proxy.mjs';
 import { extractJsonObject, stripFence } from './nexus.mjs';
 
@@ -133,21 +133,28 @@ function clientWantsStream(body, request) {
   return String(accept).includes('text/event-stream');
 }
 
-async function readJsonBody(upstream) {
+async function readJsonBody(upstream, maxBytes = UPSTREAM_MAX_BUFFER_BYTES) {
   if (typeof upstream.text === 'function') return upstream.text();
   if (typeof upstream.json === 'function') return JSON.stringify(await upstream.json());
   if (!upstream.body) return '';
   const reader = upstream.body.getReader();
   const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) { await reader.cancel().catch(() => {}); break; }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
   }
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
 }
 
-export async function peekSpecialist({ fetchImpl = fetch, request, target, body, signal, peekChars = HANDOFF_PEEK_CHARS } = {}) {
+export async function peekSpecialist({ fetchImpl = fetch, request, target, body, signal, peekChars = HANDOFF_PEEK_CHARS, peekTimeoutMs = HANDOFF_PEEK_TIMEOUT_MS } = {}) {
   const keepReasoning = clientAskedForReasoning(body);
   const payload = { ...body, stream: true };
   const headers = new Headers();
@@ -160,13 +167,17 @@ export async function peekSpecialist({ fetchImpl = fetch, request, target, body,
   const hopAbort = new AbortController();
   const onParent = () => hopAbort.abort();
   signal?.addEventListener?.('abort', onParent, { once: true });
+  // A specialist that accepts the stream but never emits the peek tokens must not
+  // pin this hop: bound the peek phase, combined with parent + manual abort.
+  const peekDeadline = peekTimeoutMs > 0 ? AbortSignal.timeout(peekTimeoutMs) : null;
+  const fetchSignal = peekDeadline ? AbortSignal.any([hopAbort.signal, peekDeadline]) : hopAbort.signal;
   let upstream;
   try {
     upstream = await fetchImpl(target, {
       method: request?.method ?? 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: hopAbort.signal,
+      signal: fetchSignal,
     });
   } catch (error) {
     signal?.removeEventListener?.('abort', onParent);
@@ -205,9 +216,21 @@ export async function peekSpecialist({ fetchImpl = fetch, request, target, body,
   const events = [];
   let content = '';
   let finished = false;
+  let peekTimedOut = false;
+  // Race each read against the peek deadline so a stalled stream that never
+  // honours the fetch signal still can't pin this hop.
+  const deadlineRace = peekDeadline
+    ? new Promise((_res, rej) => {
+        if (peekDeadline.aborted) rej(peekDeadline.reason ?? new Error('peek timeout'));
+        else peekDeadline.addEventListener('abort', () => rej(peekDeadline.reason ?? new Error('peek timeout')), { once: true });
+      })
+    : null;
+  if (deadlineRace) deadlineRace.catch(() => {});
   try {
     while (content.length < peekChars && !finished) {
-      const { done, value } = await reader.read();
+      const { done, value } = deadlineRace
+        ? await Promise.race([reader.read(), deadlineRace])
+        : await reader.read();
       if (done) {
         for (const event of parser.end()) {
           if (event.done) { finished = true; continue; }
@@ -230,14 +253,25 @@ export async function peekSpecialist({ fetchImpl = fetch, request, target, body,
     }
   } catch (error) {
     if (signal?.aborted) throw error;
+    if (peekDeadline?.aborted) peekTimedOut = true;
   }
 
   const handoff = parseHandoffContent(content);
-  if (handoff) {
+  if (handoff || peekTimedOut) {
     hopAbort.abort();
     try { await reader.cancel(); } catch {}
     signal?.removeEventListener?.('abort', onParent);
-    return { status: upstream.status, handoff, content, finished: true, events, reader: null, hopAbort, keepReasoning };
+    return {
+      status: upstream.status,
+      handoff: handoff ?? null,
+      content,
+      finished: true,
+      events,
+      reader: null,
+      hopAbort,
+      keepReasoning,
+      degraded: peekTimedOut ? 'peek_timeout' : undefined,
+    };
   }
 
   return {

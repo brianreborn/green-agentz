@@ -21,3 +21,17 @@ export class UnavailableError extends GreenRoomzError {
     this.name = 'UnavailableError';
   }
 }
+
+export class UpstreamTimeoutError extends GreenRoomzError {
+  constructor(message = 'upstream backend timed out', details) {
+    super(message, { status: 504, code: 'upstream_timeout', details });
+    this.name = 'UpstreamTimeoutError';
+  }
+}
+
+export class UpstreamProtocolError extends GreenRoomzError {
+  constructor(message = 'upstream backend response was unusable', details) {
+    super(message, { status: 502, code: 'upstream_protocol', details });
+    this.name = 'UpstreamProtocolError';
+  }
+}

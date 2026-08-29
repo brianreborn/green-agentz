@@ -1,16 +1,16 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import { AGENCY_ROLE, DEFAULT_FAITH, DEFAULT_FEAR, FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS, REBUKE_OP, UPSTREAM_MAX_BUFFER_BYTES, UPSTREAM_TIMEOUT_MS, YOLO_TOKEN } from './constants.mjs';
+import { loadDeclaredKernel } from './config.mjs';
 import { Mailbox } from './mailbox.mjs';
 import { CAP, MonitorIpc } from './monitor/ipc.mjs';
 import { createLogger } from './monitor/logger.mjs';
-import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
+import { GreenRoomzError, UnavailableError, UpstreamProtocolError, UpstreamTimeoutError, ValidationError } from './errors.mjs';
 import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
-import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, stripSlashCommand } from './routing.mjs';
-import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
+import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, parseSlashCommand, stripSlashCommand } from './routing.mjs';
+import { deadlineSignal, headerSafe, isTimeoutAbort, jsonResponse, readCappedText, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
   '/health',
@@ -69,9 +69,8 @@ function corsHeaders(manifest, origin) {
 
 export function injectSystemPolicy(body, agent) {
   const payload = { ...body };
-  const policyPath = agent?.system_policy;
-  if (!policyPath || !existsSync(policyPath)) return payload;
-  const policy = readFileSync(policyPath, 'utf8');
+  const policy = loadDeclaredKernel(agent);
+  if (!policy) return payload;
   const messages = Array.isArray(payload.messages) ? [...payload.messages] : [];
   const marker = policy.trim().slice(0, 24);
   if (messages.some((message) => message?.role === 'system' && String(message.content ?? '').includes(marker))) {
@@ -239,7 +238,9 @@ export class Gateway {
       return await this.handleInference(request, response, body, identity, cors, url.pathname);
     } catch (error) {
       const status = error instanceof GreenRoomzError ? error.status : 500;
-      const retryAfter = error instanceof UnavailableError ? { 'retry-after': '2' } : {};
+      const retryAfter = (error instanceof UnavailableError || error instanceof UpstreamTimeoutError)
+        ? { 'retry-after': '2' }
+        : {};
       return jsonResponse(response, status, {
         error: {
           message: redact(error.message),
@@ -365,15 +366,28 @@ export class Gateway {
     await this.processes.ensure(agent, { signal: request.abortSignal });
     const payload = nativePayload(native.kind, body, alias);
     const target = `http://127.0.0.1:${agent.port}${native.path}`;
-    const upstream = await this.fetchImpl(target, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify(payload),
-      signal: request.abortSignal,
-    });
-    const raw = typeof upstream.text === 'function'
-      ? await upstream.text()
-      : JSON.stringify(await upstream.json());
+    const upstreamTimeout = this.manifest.gateway.upstream_timeout_ms ?? UPSTREAM_TIMEOUT_MS;
+    let upstream;
+    try {
+      upstream = await this.fetchImpl(target, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', connection: 'close' },
+        body: JSON.stringify(payload),
+        signal: deadlineSignal(request.abortSignal, upstreamTimeout),
+      });
+    } catch (error) {
+      if (isTimeoutAbort(error, request.abortSignal)) {
+        throw new UpstreamTimeoutError(`${alias} timed out`, { timeout_ms: upstreamTimeout });
+      }
+      throw error;
+    }
+    let raw;
+    try {
+      raw = await readCappedText(upstream, this.manifest.gateway.upstream_max_buffer_bytes ?? UPSTREAM_MAX_BUFFER_BYTES);
+    } catch (error) {
+      if (error?.code === 'UPSTREAM_TOO_LARGE') throw new UpstreamProtocolError(`${alias} response exceeded buffer cap`);
+      throw error;
+    }
     let parsed;
     try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
     this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
@@ -400,6 +414,7 @@ export class Gateway {
       'x-green-roomz-route-reason': headerSafe(routed.reason ?? ''),
       'x-green-roomz-hops': headerSafe(extra.hops ?? ''),
       'x-green-roomz-nexus': NEXUS_ALIAS,
+      'x-green-roomz-agency': AGENCY_ROLE,
       ...cors,
     };
   }
@@ -421,6 +436,29 @@ export class Gateway {
     }
 
     return this.handleChatTurn(request, response, body, identity, session, cors, pathname);
+  }
+
+  /**
+   * Persist any /faith /fear /confidence /yolo /rebuke setting carried on this turn
+   * to the session, then report the faith/fear levels the nexus consult should run at.
+   * hardRuleRoute already parsed (and would have thrown on) a bad slash command.
+   */
+  applyTurnSettings(issuedSession, identity, body) {
+    let slash = null;
+    try { slash = parseSlashCommand(body); } catch { slash = null; }
+    if (slash?.setting) {
+      const patch = {};
+      if (slash.setting === 'faith') patch.faith = slash.faith;
+      else if (slash.setting === 'fear') patch.fear = slash.fear;
+      else if (slash.setting === 'confidence') patch.confidenceMood = slash.confidenceMood;
+      else if (slash.setting === YOLO_TOKEN) patch.yolo = slash.yolo;
+      if (Object.keys(patch).length) this.sessions.patch(issuedSession, patch);
+    }
+    if (slash?.op === REBUKE_OP) {
+      this.sessions.patch(issuedSession, { op: REBUKE_OP, rebuke: slash.rest || null });
+    }
+    const entry = this.sessions.get(issuedSession, identity);
+    return { faithLevel: entry?.faith ?? DEFAULT_FAITH, fearLevel: entry?.fear ?? DEFAULT_FEAR };
   }
 
   async handleRoutePlan(request, response, body, identity, session, cors) {
@@ -446,6 +484,9 @@ export class Gateway {
       }, this.routeHeaders(issuedSession, routed, cors, { hops: '' }));
     }
     const consultBody = stripSlashCommand(body);
+    const settings = session?.id
+      ? this.applyTurnSettings(session.id, identity, body)
+      : { faithLevel: DEFAULT_FAITH, fearLevel: DEFAULT_FEAR };
     const nexusLive = this.registry.status(NEXUS_ALIAS).state !== 'unavailable';
     let plan = planRoute({ messages: [{ role: 'user', content: latestUserMessageText(consultBody) }] });
     if (nexusLive) {
@@ -458,6 +499,7 @@ export class Gateway {
           visited: new Set(),
           notes: [],
           signal: request.abortSignal,
+          ...settings,
         });
         if (picked?.route) {
           plan = {
@@ -536,6 +578,7 @@ export class Gateway {
       agentAlias: hard.effectiveAlias ?? FALLBACK_ALIAS,
       modality: hard.modality,
     });
+    const turnSettings = this.applyTurnSettings(issuedSession, identity, body);
 
     const hopHeaders = (alias, reason) => this.routeHeaders(
       issuedSession,
@@ -575,6 +618,7 @@ export class Gateway {
             visited,
             notes,
             signal: request.abortSignal,
+            ...turnSettings,
           });
           alias = picked.route;
           reason = picked.reason ?? 'nexus';
@@ -645,6 +689,14 @@ export class Gateway {
           signal: request.abortSignal,
         });
 
+        if (peek.degraded === 'peek_timeout' && !peek.handoff) {
+          visited.add(alias);
+          hops.push(alias);
+          notes.push(stripControls(`${alias} did not emit within the peek window`));
+          this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'peek_timeout' } });
+          continue;
+        }
+
         if (peek.handoff) {
           const suggest = peek.handoff.suggest && peek.handoff.suggest !== 'null' ? peek.handoff.suggest : null;
           notes.push(stripControls(peek.handoff.reason ?? 'handoff'));
@@ -680,8 +732,26 @@ export class Gateway {
     const address = this.bindAddress(host);
     const listenPort = Number(port ?? this.manifest.gateway.port ?? 8080);
     const server = createServer((req, res) => {
-      Promise.resolve(this.handle(req, res)).catch((error) => { if (!res.headersSent) jsonResponse(res, 500, { error: { message: String(error.message), type: 'internal_error' } }); });
+      // A dead client socket must not take the process down mid-write.
+      req.on('error', () => {});
+      res.on('error', () => {});
+      Promise.resolve(this.handle(req, res)).catch((error) => {
+        try {
+          if (!res.headersSent) {
+            jsonResponse(res, 500, { error: { message: redact(String(error?.message ?? error)), type: 'internal_error' } });
+          } else if (!res.writableEnded) {
+            res.destroy(error instanceof Error ? error : new Error(String(error)));
+          }
+        } catch { /* socket already gone */ }
+      });
     });
+    // Malformed HTTP from a client is a 400, never a crash.
+    server.on('clientError', (_error, socket) => {
+      if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      else socket.destroy();
+    });
+    server.headersTimeout = this.manifest.gateway.headers_timeout_ms ?? 30_000;
+    server.requestTimeout = this.manifest.gateway.request_timeout_ms ?? 0;
     return new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(listenPort, address, () => resolve(server));

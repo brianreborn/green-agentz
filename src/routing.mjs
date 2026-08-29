@@ -1,5 +1,13 @@
 import { ValidationError } from './errors.mjs';
-import { MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import {
+  CONFIDENCE_MOODS,
+  FAITH_LEVELS,
+  FEAR_LEVELS,
+  MONITOR_ALIAS,
+  NEXUS_ALIAS,
+  REBUKE_OP,
+  YOLO_TOKEN,
+} from './constants.mjs';
 import { agentCanAdmit } from './memory.mjs';
 
 function inspectContentPart(part, found) {
@@ -131,6 +139,53 @@ const SLASH_ALIASES = Object.freeze({
   auto: 'auto',
 });
 
+const FAITH_ALIASES = Object.freeze({ low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' });
+const FEAR_ALIASES = Object.freeze({ low: 'low', medium: 'medium', high: 'high' });
+const CONFIDENCE_ALIASES = Object.freeze({
+  can: 'can', may: 'may', will: 'will', shall: 'shall', must: 'must',
+  low: 'may', medium: 'will', high: 'shall', xhigh: 'must',
+});
+
+function takeToken(rest) {
+  const trimmed = String(rest ?? '').trim();
+  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  if (!match) return { head: '', rest: '' };
+  return { head: match[1].toLowerCase(), rest: (match[2] ?? '').trim() };
+}
+
+export function parseFaithLevel(rest) {
+  const { head, rest: next } = takeToken(rest);
+  if (FAITH_LEVELS[head]) return { level: head, rest: next };
+  const n = Number(head);
+  if (Number.isFinite(n) && n >= 0 && n <= 1) {
+    const level = n < 0.35 ? 'low' : n < 0.65 ? 'medium' : n < 0.9 ? 'high' : 'xhigh';
+    return { level, rest: next };
+  }
+  throw new ValidationError('/faith needs low|medium|high|xhigh or 0-1');
+}
+
+export function parseFearLevel(rest) {
+  const { head, rest: next } = takeToken(rest);
+  if (FEAR_LEVELS[head]) return { level: head, rest: next };
+  throw new ValidationError('/fear needs low|medium|high');
+}
+
+export function parseConfidenceMood(rest) {
+  const { head, rest: next } = takeToken(rest);
+  const mood = CONFIDENCE_ALIASES[head];
+  if (mood && CONFIDENCE_MOODS[mood]) return { mood, rest: next };
+  throw new ValidationError('/confidence needs can|may|will|shall|must (or low|medium|high|xhigh)');
+}
+
+export function parseYolo(rest) {
+  const trimmed = String(rest ?? '').trim();
+  if (!trimmed) return { yolo: true, rest: '' };
+  const { head, rest: next } = takeToken(trimmed);
+  if (head === 'on' || head === 'true' || head === '1') return { yolo: true, rest: next };
+  if (head === 'off' || head === 'false' || head === '0') return { yolo: false, rest: next };
+  return { yolo: true, rest: trimmed };
+}
+
 /** Chat-path aliases that must not be peeked as SSE /v1/chat/completions. */
 export const NATIVE_CHAT = Object.freeze({
   'semantic-embedding-agent': { path: '/v1/embeddings', kind: 'embeddings' },
@@ -162,8 +217,31 @@ export function parseSlashCommand(body) {
   const match = /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(unfenced);
   if (!match) return null;
   const token = match[1].toLowerCase();
+  const rawRest = (match[2] ?? '').trim();
+  if (token === 'forget') {
+    throw new ValidationError('/forget is not a proven phenomenon; use /rebuke to correct');
+  }
+  if (token === 'faith') {
+    const parsed = parseFaithLevel(rawRest);
+    return { token, alias: null, rest: parsed.rest, setting: 'faith', faith: parsed.level, settingOnly: !parsed.rest };
+  }
+  if (token === 'fear') {
+    const parsed = parseFearLevel(rawRest);
+    return { token, alias: null, rest: parsed.rest, setting: 'fear', fear: parsed.level, settingOnly: !parsed.rest };
+  }
+  if (token === 'confidence') {
+    const parsed = parseConfidenceMood(rawRest);
+    return { token, alias: null, rest: parsed.rest, setting: 'confidence', confidenceMood: parsed.mood, settingOnly: !parsed.rest };
+  }
+  if (token === YOLO_TOKEN) {
+    const parsed = parseYolo(rawRest);
+    return { token, alias: null, rest: parsed.rest, setting: YOLO_TOKEN, yolo: parsed.yolo, settingOnly: !parsed.rest };
+  }
+  if (token === REBUKE_OP) {
+    return { token, alias: null, rest: rawRest, op: REBUKE_OP, settingOnly: false };
+  }
   if (!Object.prototype.hasOwnProperty.call(SLASH_ALIASES, token)) return null;
-  return { token, alias: SLASH_ALIASES[token], rest: (match[2] ?? '').trim() };
+  return { token, alias: SLASH_ALIASES[token], rest: rawRest };
 }
 
 export function stripSlashCommand(body) {
@@ -198,6 +276,12 @@ export function stripSlashCommand(body) {
 export function hardRuleRoute(body, registry) {
   const modality = detectModalities(body);
   const slash = parseSlashCommand(body);
+  if (slash?.op === REBUKE_OP) {
+    return finish(body, registry, null, REBUKE_OP, modality);
+  }
+  if (slash?.setting && slash.settingOnly) {
+    return finish(body, registry, null, `slash_${slash.setting}`, modality);
+  }
   if (slash?.token === 'auto') {
     return finish(body, registry, null, 'nexus', modality);
   }
@@ -239,6 +323,7 @@ export function hardRuleRoute(body, registry) {
   return finish(body, registry, null, 'nexus', modality);
 }
 
+/** Agency code-switch: choose a specialist register. Do not speak as that specialist. */
 export function routeRequest(body, registry, _sessionAgent) {
   return hardRuleRoute(body, registry);
 }

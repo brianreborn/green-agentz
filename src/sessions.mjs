@@ -8,12 +8,16 @@ export class SessionLedger {
     this.entries = new Map();
   }
 
-  create({ identity, agentAlias, modality }) {
+  create({ identity, agentAlias, modality, faith = 'medium', confidenceMood = 'will', fear = 'low', yolo = false } = {}) {
     this.expire();
     while (this.entries.size >= this.limit) this.evictOldest();
     const id = randomUUID();
     const now = this.clock();
-    this.entries.set(id, { id, identity, agentAlias, modality, createdAt: now, lastAccess: now, expiresAt: now + this.ttlMs });
+    this.entries.set(id, {
+      id, identity, agentAlias, modality, faith, confidenceMood, fear, yolo,
+      op: null, rebuke: null,
+      createdAt: now, lastAccess: now, expiresAt: now + this.ttlMs,
+    });
     return id;
   }
 
@@ -29,9 +33,13 @@ export class SessionLedger {
   }
 
   setAgentAlias(id, agentAlias) {
+    return this.patch(id, { agentAlias });
+  }
+
+  patch(id, fields) {
     const entry = this.entries.get(id);
     if (!entry) return false;
-    entry.agentAlias = agentAlias;
+    Object.assign(entry, fields);
     const now = this.clock();
     entry.lastAccess = now;
     entry.expiresAt = now + this.ttlMs;
