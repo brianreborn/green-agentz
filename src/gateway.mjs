@@ -149,7 +149,18 @@ function isChatPath(pathname) {
   return path === '/v1/chat/completions' || path.endsWith('/chat/completions');
 }
 
-function wrapNativeAsChat(alias, nativeJson) {
+function wrapNativeAsChat(alias, nativeJson, kind) {
+  let content;
+  if (typeof nativeJson === 'string') content = nativeJson;
+  else if (kind === 'whisper' && typeof nativeJson?.text === 'string') content = nativeJson.text.trim();
+  else if (kind === 'image') {
+    const item = nativeJson?.data?.[0] ?? {};
+    const url = item.url ?? (item.b64_json ? `data:image/png;base64,${item.b64_json}` : null);
+    content = url
+      ? [{ type: 'image_url', image_url: { url } }]
+      : JSON.stringify(nativeJson);
+  }
+  else content = JSON.stringify(nativeJson);
   return {
     id: `grz-native-${alias}`,
     object: 'chat.completion',
@@ -157,7 +168,7 @@ function wrapNativeAsChat(alias, nativeJson) {
     model: alias,
     choices: [{
       index: 0,
-      message: { role: 'assistant', content: typeof nativeJson === 'string' ? nativeJson : JSON.stringify(nativeJson) },
+      message: { role: 'assistant', content },
       finish_reason: 'stop',
     }],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -179,7 +190,41 @@ function nativePayload(kind, body, alias) {
     if (!audio) throw new ValidationError('/audio requires an attached audio part');
     return { audio_data: audio };
   }
+  if (kind === 'image') {
+    const prompt = String(text ?? '').trim();
+    if (!prompt) throw new ValidationError('image generation needs a text prompt');
+    return { prompt, n: 1, response_format: 'b64_json' };
+  }
   return body;
+}
+
+/** data:audio/wav;base64,AAAA  ->  { bytes: Buffer, mime: 'audio/wav', ext: 'wav' } */
+export function decodeDataUrl(dataUrl) {
+  const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(String(dataUrl ?? ''));
+  if (!m) return null;
+  const mime = m[1] || 'application/octet-stream';
+  const bytes = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]));
+  const ext = (mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '') || 'bin';
+  return { bytes, mime, ext };
+}
+
+/** Shape the outbound request per native backend: whisper wants multipart, the rest JSON. */
+function nativeRequestInit(kind, payload, signal) {
+  if (kind === 'whisper') {
+    const decoded = decodeDataUrl(payload.audio_data);
+    if (!decoded) throw new ValidationError('audio part is not a decodable data: URL');
+    const form = new FormData();
+    form.set('file', new Blob([decoded.bytes], { type: decoded.mime }), `audio.${decoded.ext}`);
+    form.set('response_format', 'json');
+    form.set('temperature', '0');
+    return { method: 'POST', body: form, signal, headers: { connection: 'close' } };
+  }
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify(payload),
+    signal,
+  };
 }
 
 export class Gateway {
@@ -435,13 +480,10 @@ export class Gateway {
     const upstreamTimeout = this.manifest.gateway.upstream_timeout_ms ?? UPSTREAM_TIMEOUT_MS;
     let upstream;
     try {
-      upstream = await this.fetchImpl(target, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', connection: 'close' },
-        body: JSON.stringify(payload),
-        signal: deadlineSignal(request.abortSignal, upstreamTimeout),
-      });
+      const init = nativeRequestInit(native.kind, payload, deadlineSignal(request.abortSignal, upstreamTimeout));
+      upstream = await this.fetchImpl(target, init);
     } catch (error) {
+      if (error instanceof GreenRoomzError) throw error;
       if (isTimeoutAbort(error, request.abortSignal)) {
         throw new UpstreamTimeoutError(`${alias} timed out`, { timeout_ms: upstreamTimeout });
       }
@@ -458,7 +500,7 @@ export class Gateway {
     try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
     this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
     this.sessions.setAgentAlias(issuedSession, alias);
-    const wrapped = wrapNativeAsChat(alias, parsed);
+    const wrapped = wrapNativeAsChat(alias, parsed, native.kind);
     return jsonResponse(
       response,
       upstream.status >= 400 ? upstream.status : 200,

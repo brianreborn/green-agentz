@@ -68,12 +68,33 @@ async function probe(model) {
       if (r.status === 200 && Array.isArray(results) && results.length === 2) return done('ok', `scored ${results.length}`);
       return done('fail', `status ${r.status}: ${r.text.slice(0, 160)}`);
     }
-    if (kind === 'tts' || kind === 'image-gen' || kind === 'audio-in') {
-      // No safe synthetic input without a real asset; confirm the gateway rejects
-      // cleanly on the chat path rather than hang (documented behaviour).
-      const r = await call('/v1/chat/completions', { model: alias, lock_alias: true, messages: [{ role: 'user', content: 'probe' }], max_tokens: 4 });
-      if ([200, 400, 415, 503].includes(r.status)) return done('degraded', `chat-path status ${r.status} (needs a real ${kind} asset to fully verify)`);
-      return done('fail', `unexpected status ${r.status}`);
+    if (kind === 'audio-in') {
+      const { readFileSync, existsSync } = await import('node:fs');
+      const { fileURLToPath } = await import('node:url');
+      const wavPath = fileURLToPath(new URL('./assets/hello-world.wav', import.meta.url));
+      if (!existsSync(wavPath)) return done('degraded', 'no e2e/assets/hello-world.wav (run: node deploy/make-speech.mjs --fixtures)');
+      const data = `data:audio/wav;base64,${readFileSync(wavPath).toString('base64')}`;
+      const r = await call('/v1/chat/completions', {
+        model: alias, lock_alias: true,
+        messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data } }] }],
+      });
+      const text = r.json?.choices?.[0]?.message?.content;
+      if (r.status === 200 && typeof text === 'string' && /hello,?\s*world/i.test(text)) return done('ok', j(text.trim().slice(0, 48)));
+      if (r.status === 200) return done('degraded', `transcribed but unexpected: ${JSON.stringify(text)?.slice(0, 80)}`);
+      return done('fail', `status ${r.status}: ${r.text.slice(0, 160)}`);
+    }
+    if (kind === 'image-gen') {
+      const r = await call('/v1/chat/completions', { model: alias, lock_alias: true, messages: [{ role: 'user', content: '/image a small red circle' }] });
+      const c = r.json?.choices?.[0]?.message?.content;
+      if (r.status === 200 && Array.isArray(c) && c[0]?.type === 'image_url') return done('ok', 'image part returned');
+      if ([503, 504].includes(r.status)) return done('degraded', `sd-server not answering (${r.status})`);
+      return done('fail', `status ${r.status}: ${r.text.slice(0, 160)}`);
+    }
+    if (kind === 'tts') {
+      // piper is one-shot CLI, no server: /tts on the chat path is a deliberate 400.
+      const r = await call('/v1/chat/completions', { model: alias, lock_alias: true, messages: [{ role: 'user', content: '/tts hello' }], max_tokens: 4 });
+      if (r.status === 400) return done('degraded', 'no persistent piper server by design (/tts -> 400)');
+      return done('fail', `expected 400, got ${r.status}`);
     }
     // text + vision: a real 1-token completion, locked to this alias
     const r = await call('/v1/chat/completions', {

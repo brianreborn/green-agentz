@@ -191,6 +191,7 @@ export const NATIVE_CHAT = Object.freeze({
   'semantic-embedding-agent': { path: '/v1/embeddings', kind: 'embeddings' },
   'retrieval-rerank-agent': { path: '/v1/rerank', kind: 'rerank' },
   'audio-transcription-agent': { path: '/inference', kind: 'whisper' },
+  'image-generation-agent': { path: '/v1/images/generations', kind: 'image' },
 });
 
 function latestUserCommandText(body) {
