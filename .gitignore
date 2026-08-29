@@ -4,6 +4,9 @@ data/*.out.log
 data/*.hdr.txt
 data/*.req.json
 data/*.res.json
+data/*.headers.txt
+data/*.json
+data/local-ci-last.txt
 data/serve*
 data/ram-watch*
 data/open-taskmgr.ps1

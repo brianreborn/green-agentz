@@ -31,8 +31,15 @@ while ($true) {
   $tail = ''
   if (Test-Path $outFile) {
     $lines = Get-Content $outFile -ErrorAction SilentlyContinue
-    $summary = $lines | Where-Object { $_ -match '^(ℹ|✔|✖|tests |pass |fail |ℹ tests)' } | Select-Object -Last 8
-    $tail = ($summary -join ' | ')
+    # node --test prints "# tests N" / "# pass N" / "# fail N" (ASCII) plus unicode marks
+    $summary = $lines | Where-Object {
+      $_ -match '^# (tests|pass|fail|cancelled|skipped|todo|duration_ms)\b' -or
+      $_ -match '^(tests |pass |fail |duration_ms)' -or
+      $_ -match '[✖×].*fail'
+    } | Select-Object -Last 10
+    $passN = @($lines | Where-Object { $_ -match '^(\u2714|ok )' }).Count
+    $failN = @($lines | Where-Object { $_ -match '^(\u2718|✖|not ok )' }).Count
+    $tail = ("passmarks=$passN failmarks=$failN | " + ($summary -join ' | '))
   }
   $elapsed = [int]((Get-Date) - $t0).TotalSeconds
   if ($code -eq 0) {

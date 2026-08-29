@@ -174,22 +174,21 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 |---|---|
 | Unit tests (routing/gateway/nexus/proxy/logical) | **pass** (focused) |
 | Full suite | last local-ci snapshot: suite ran (fuzz **9/9** present in `local-ci-last.txt`); loop process **dead** after start line only |
-| Serve live | resident **8187** + gateway **:8080** (health often `degraded`); code specialist may show impractical |
+| Serve live | resident **8187** + gateway **:8080** (often `degraded`) |
 | Direct 8187 8-tok | **3.0 tok/s meas** (2026-08-29) |
-| `/code` via gateway | needs live re-verify |
-| Local CI loop | restart `scripts/local-ci.ps1` (prior PID died after start line) |
-| Visible console | `serve-window.cmd` |
-| Git | `980c87e` + follow-ups; keep committing |
+| `/code` via gateway | still needs live re-verify |
+| Local CI loop | **`scripts/local-ci-window.cmd`** detached, every 5 min → `data/local-ci.log` |
+| Visible console | `serve-window.cmd` / `local-ci-window.cmd` |
+| Git | local commits; develop further on **shalom** (faster) |
 
 ---
 
 ## Next
 
-1. Re-verify `/code` + `/route` on :8080  
-2. Restart local CI  
-3. pixel8 / **55QD65NF** ADB (sideload path)  
-4. SAX2V1R UART / CLK-glitch path (cousin notes above); dump before flash  
-5. TU7000: SDB + Bishop Fox path if developer mode OK  
-6. CE practice: CKS5TW + J3B + IMW1202  
+1. Keep local-ci window alive on qodesh; read `data/local-ci.log`  
+2. Continue agent work on **shalom**  
+3. pixel8 / **55QD65NF** ADB  
+4. SAX2V1R UART / CLK-glitch; dump before flash  
+5. TU7000 SDB if developer mode OK  
 
 New device → row + all three charts + **reset** note. Update charts on every new `meas`.
