@@ -77,8 +77,25 @@ test('health is degraded when artifacts are missing and models stay truthful', a
   assert.equal(health.body.status, 'degraded');
   const vision = health.body.agents.find((agent) => agent.id === 'vision-layout-agent');
   assert.deepEqual(vision.native_capabilities, ['text', 'image']);
+  assert.deepEqual(vision.callable_capabilities, []);
+  assert.deepEqual(vision.ready_capabilities, []);
   const models = await request(server, { path: '/v1/models' });
   assert.equal(models.body.data.length, REQUIRED_ALIASES.length);
+});
+
+test('/props distinguishes declared, callable, and loaded capabilities', async (t) => {
+  const { server } = await withServer(t);
+  const result = await request(server, { path: '/props' });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.capability_reporting, {
+    native_capabilities: 'declared',
+    callable_capabilities: 'runtime_checked',
+    ready_capabilities: 'loaded_now',
+  });
+  assert.equal('native_capabilities_are_truthful' in result.body, false);
+  const vision = result.body.models.find((model) => model.id === 'vision-layout-agent');
+  assert.ok(vision.native_capabilities.includes('image'));
+  assert.deepEqual(vision.callable_capabilities, []);
 });
 
 test('logical router returns a plan only when route_plan_only is set', async (t) => {

@@ -69,12 +69,24 @@ export class AgentRegistry {
   listModels() {
     return [...this.agents.values()].map((agent) => {
       const status = this.status(agent.alias);
+      const callable = status.state === 'ready' || status.state === 'cold';
+      const loaded = status.state === 'ready';
       return {
         id: agent.alias,
         object: 'model',
         owned_by: 'green-roomz',
+        // Declared capabilities describe the configured model. Consumers that need
+        // to make a request must use the status-qualified fields below.
         native_capabilities: agent.native_capabilities,
         gateway_accepted_capabilities: agent.gateway_accepted_capabilities,
+        callable_capabilities: callable ? agent.native_capabilities : [],
+        ready_capabilities: loaded ? agent.native_capabilities : [],
+        capability_readiness: {
+          state: status.state,
+          callable,
+          loaded,
+          reasons: status.missing,
+        },
         routing_behavior: routingBehavior(agent.alias),
         availability: status.state,
         unavailable_reasons: status.missing,

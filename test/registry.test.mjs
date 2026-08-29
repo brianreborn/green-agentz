@@ -19,11 +19,23 @@ test('missing artifacts degrade only the affected alias', async () => {
   assert.equal(vision.availability, 'unavailable');
   assert.ok(vision.unavailable_reasons.some((reason) => reason.startsWith('model:')));
   assert.ok(vision.native_capabilities.includes('image'));
+  assert.deepEqual(vision.callable_capabilities, []);
+  assert.deepEqual(vision.ready_capabilities, []);
+  assert.deepEqual(vision.capability_readiness, {
+    state: 'unavailable',
+    callable: false,
+    loaded: false,
+    reasons: vision.unavailable_reasons,
+  });
   assert.equal(vision.routing_behavior, 'modality_override');
   const monitor = models.find((model) => model.id === 'security-monitor-agent');
   assert.equal(monitor.availability, 'ready');
   assert.equal(monitor.routing_behavior, 'mailbox');
   assert.deepEqual(monitor.unavailable_reasons, []);
+  assert.deepEqual(monitor.callable_capabilities, ['text', 'json']);
+  assert.deepEqual(monitor.ready_capabilities, ['text', 'json']);
+  assert.equal(monitor.capability_readiness.callable, true);
+  assert.equal(monitor.capability_readiness.loaded, true);
 });
 
 test('inspect marks a CPU-impractical specialist unavailable even with a vulkan profile', async () => {
