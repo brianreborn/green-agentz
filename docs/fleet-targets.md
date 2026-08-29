@@ -95,6 +95,24 @@ Rejected for not apparently very feasible: *(none yet)*
 
 ---
 
+## Public root / unlock landscape (cursory, 2026-08-29)
+
+| id / cousin | public status | venue / notes |
+|---|---|---|
+| **SAX1V1K** (cousin of SAX2) | **Yes — OpenWrt official** | UART; stock root login = serial# CAPS; MeisterLone / Lanchon U-Boot scripts; ToH IPQ8072A. **Not DEF CON** — OpenWrt forum + git. |
+| **SAX2V1R** (this unit, Sercomm IP6442B) | **Partial cousin work** | OpenWrt SAX1 thread: SAX1V1R has UART, eMMC CLK glitch → U-Boot, fallback single-user; **no** published OpenWrt image for SAX2. Different SoC than V1K. |
+| **EN2251** (Puma 7 Atom) | **Family rooted, not this SKU** | **DEF CON 25 CableTap** (Bastille): RDK / Puma Atom+ARM root chains (Arris/Cisco/Technicolor/Motorola). **DEF CON 30 IoT Village** Rapid7: Arris SB6190 eMMC → SSH root. Hitron CGNM-2250 (Puma 6 cousin): button → `nonpcpu` serial/telnet root. EN2251-specific writeup: **not found**. |
+| **TU7000** (Tizen 5.5) | **Yes (dev mode)** | Bishop Fox SDB package-name injection → OS cmds; **demoed on UN43TU700D** (same TU7000 line). Newer public Samsung roots (QN90B/F Magisk-class / Mali) are different gens. SamyGO history. |
+| **55QD65NF** Fire MT9602 | **ADB only for this SKU** | No public Magisk/unlock for Fire OEM QD6. Cousins: Hisense **U8N MT9618** Google TV XDA Magisk (UART+fastboot); old Exploitee.rs Hisense Android eMMC; VIDAA MT9602 service UART in Hisense manuals — not Fire. Fire **Stick/Cube** (not panel) heavily rooted on XDA. |
+| **E472VLE** (2012 VIA Yahoo) | **Era rooted; SKU sparse** | Old Vizio/MTK UART service-jack + cmd inject (XDA); later SmartCast = Exploitee.rs / L9 RCE (newer). Google TV Co-Star / Hisense Pulse: early ADB-root (DEF CON-adjacent Google TV talks). Exact E472VLE: **no** modern guide. |
+| **K243Y** scaler | **No** | Monitor OSD MCU — not a public root scene. |
+| **IMW1202 / CKS5TW / J3B** | **No named roots** | Generic BT audio MCU / Qualcomm aptX / Jawbone-CSR class practice only. No DEF CON SKU writeups found. |
+| **pixel8 / note9** | **Yes** | Mainstream (KernelSU / Magisk). |
+
+**DEF CON takeaway:** cable/Puma path is the conference-hardened one (CableTap, IoT Village). Spectrum Wi-Fi = OpenWrt community. Tizen TU7000 = published SDB break. Fire OEM panel ≠ Fire Stick scene.
+
+---
+
 ## Secondary controllers (powerful misses)
 
 | host | secondary | worker? |
@@ -119,21 +137,22 @@ Rejected for not apparently very feasible: *(none yet)*
 |---|---|
 | Unit tests (routing/gateway/nexus/proxy/logical) | **pass** (focused) |
 | Full suite | last local-ci snapshot: suite ran (fuzz **9/9** present in `local-ci-last.txt`); loop process **dead** after start line only |
-| Serve live | **8187 health ok**; `llama-server` PID 1252 + `node … serve` PID 10372; **gateway :3000 down** |
-| Direct 8187 8-tok | **3.0 tok/s meas** (2026-08-29; `predicted_per_second` 3.04; 8 completion tok; cold prompt ~62 s) |
-| `/code` via gateway | **not re-verified** — gateway not listening |
-| Local CI loop | **started** then died — only `local-ci start pid=7768`; no PASS/FAIL ticks; restart needed |
-| Visible console | `serve-window.cmd` + `%~dp0` |
-| Uncommitted | gateway cold-skip, GGML_VULKAN=0 on CPU, slash/prettify, fuzz, fleet doc, local-ci, serve-window |
+| Serve live | resident **8187** + gateway **:8080** (health often `degraded`); code specialist may show impractical |
+| Direct 8187 8-tok | **3.0 tok/s meas** (2026-08-29) |
+| `/code` via gateway | needs live re-verify |
+| Local CI loop | restart `scripts/local-ci.ps1` (prior PID died after start line) |
+| Visible console | `serve-window.cmd` |
+| Git | `980c87e` + follow-ups; keep committing |
 
 ---
 
 ## Next
 
-1. Bring gateway :3000 up; re-run `/code` and 8-line `/route`  
-2. Restart `scripts/local-ci.ps1` so ticks append every 5 min  
-3. pixel8 / **55QD65NF** ADB  
-4. SAX2V1R UART dump before any flash  
-5. CE practice: CKS5TW + J3B + IMW1202  
+1. Re-verify `/code` + `/route` on :8080  
+2. Restart local CI  
+3. pixel8 / **55QD65NF** ADB (sideload path)  
+4. SAX2V1R UART / CLK-glitch path (cousin notes above); dump before flash  
+5. TU7000: SDB + Bishop Fox path if developer mode OK  
+6. CE practice: CKS5TW + J3B + IMW1202  
 
 New device → row + all three charts + **reset** note. Update charts on every new `meas`.
