@@ -38,6 +38,47 @@ function identityFrom(request, apiKey) {
   return 'loopback-dev';
 }
 
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost']);
+
+/** Normalize a Node remoteAddress (drops the v4-in-v6 prefix). */
+export function normalizeAddr(addr) {
+  const a = String(addr ?? '').trim();
+  return a.startsWith('::ffff:') ? a.slice(7) : a;
+}
+
+function ipToLong(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const p of parts) {
+    const o = Number(p);
+    if (!Number.isInteger(o) || o < 0 || o > 255) return null;
+    n = (n * 256) + o;
+  }
+  return n >>> 0;
+}
+
+/** True if `addr` is loopback, listed exactly, or inside a listed IPv4 CIDR. */
+export function peerAllowed(addr, allowPeers = []) {
+  const ip = normalizeAddr(addr);
+  if (!ip || LOOPBACK.has(ip)) return true;
+  for (const rule of allowPeers) {
+    const r = String(rule).trim();
+    if (r === ip) return true;
+    if (r.includes('/')) {
+      const [net, bitsRaw] = r.split('/');
+      const bits = Number(bitsRaw);
+      const a = ipToLong(ip);
+      const b = ipToLong(net);
+      if (a != null && b != null && bits >= 0 && bits <= 32) {
+        const mask = bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
+        if ((a & mask) === (b & mask)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function readBody(request, limit) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -163,9 +204,18 @@ export class Gateway {
   bindAddress(host) {
     const requested = host ?? this.manifest.gateway.host ?? '127.0.0.1';
     const loopback = requested === '127.0.0.1' || requested === 'localhost' || requested === '::1';
+    const bindAll = requested === '0.0.0.0' || requested === '::';
+    const allowPeers = this.manifest.gateway.allow_peers ?? [];
     if (!loopback) {
-      if (!this.apiKey || process.env.GREEN_ROOMZ_ALLOW_PUBLIC !== '1') {
-        throw new ValidationError('Public/non-loopback binding requires GREEN_ROOMZ_API_KEY and GREEN_ROOMZ_ALLOW_PUBLIC=1');
+      // Binding to a specific LAN address is allowed when an explicit peer
+      // allowlist is set (the allowlist is the gate) OR an API key is configured.
+      // Binding to 0.0.0.0/:: (every interface) still needs the explicit override.
+      const gated = allowPeers.length > 0 || Boolean(this.apiKey);
+      if (bindAll && process.env.GREEN_ROOMZ_ALLOW_PUBLIC !== '1') {
+        throw new ValidationError('Binding to all interfaces requires GREEN_ROOMZ_ALLOW_PUBLIC=1; prefer a specific host + gateway.allow_peers');
+      }
+      if (!bindAll && !gated) {
+        throw new ValidationError('Non-loopback binding requires gateway.allow_peers (a peer IP list) or GREEN_ROOMZ_API_KEY');
       }
     }
     return requested;
@@ -185,6 +235,10 @@ export class Gateway {
     }
     const url = new URL(request.url, 'http://127.0.0.1');
     try {
+      const remote = request.socket?.remoteAddress;
+      if (!peerAllowed(remote, this.manifest.gateway.allow_peers ?? [])) {
+        return jsonResponse(response, 403, { error: { message: 'Peer not allowed', type: 'forbidden_peer' } }, cors);
+      }
       const identity = identityFrom(request, this.apiKey);
       if (!identity) return jsonResponse(response, 401, { error: { message: 'Unauthorized', type: 'auth_error' } }, cors);
       if (!EXPLICIT_ROUTES.has(url.pathname) && !url.pathname.endsWith('/route')) {

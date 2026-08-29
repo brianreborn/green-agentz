@@ -80,6 +80,7 @@ export const ORCHESTRATOR_BOUNDED_KEYS = Object.freeze([
   'session_ttl_ms',
   'session_limit',
   'cors_origins',
+  'allow_peers',
 ]);
 
 export const SYSADMIN_SCHEMA_ENV = 'GREEN_ROOMZ_SYSADMIN_SCHEMA';
