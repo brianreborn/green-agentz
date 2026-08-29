@@ -134,7 +134,7 @@ Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW
 | id | hardware | OS | tok/s | reset / backup ROM | programmable |
 |---|---|---|---|---|---|
 | **shalom** | Ryzen 5 **7520U** 4C/8T Mendocino 15 W; Radeon **610M 2 CU** RDNA2 (no matrix); **16 GB**; Win11 Home | Win11 | **48 meas** CPU ngl0 tg8 (Vulkan tg8 **8.4**) | N/A (PC; git) | live GRZ |
-| **qodesh** | Athlon II X2; **8600 GT 224 MB sm_1.1 — no GGUF GPU**; 16 GB DDR3 | Win11 | **3.0 meas** CPU (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ **CPU-only** |
+| **qodesh** | Athlon II X2; **8600 GT 224 MB sm_1.1** (CUDA 6.5 back-compat goal); 16 GB DDR3 | Win11 | **3.0 meas** CPU interim (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ; GPU path = **build**, not Vulkan |
 | **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 est | FreeBSD install media / ZFS bootenv if set | CPU then GL |
 | **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 est | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
 | **note9** | **SM-N960U** `crownqltesq`; **SDM845**; Adreno 630 (GLES 3.2); 8× Kryo; **5.7 GB**; Android 10 / API 29; serial `27841130ae1c7ece` | Android 10 | 8–15 est | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+OpenCL/Vulkan |
@@ -199,7 +199,7 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 | **pixel8** | EdgeTPU | TFLite sidecar |
 | **pixel8** | Titan M2 / modem | No GGUF |
 | **shalom** | 610M 2 CU RDNA2 | **4B/7B**, not 0.5B (CPU wins 0.5B gen) |
-| **qodesh** | 8600 GT | **Do not use for GGUF** (see GPU note) |
+| **qodesh** | 8600 GT sm_1.1 | **CUDA 6.5 back-compat** for small models (see GPU note); Vulkan dead |
 | **QD65NF** | Mali-G52 + T-Con | GLES maybe |
 | Storage | SSD R5/R8; **DVD/BD** drive MCU (MediaTek/ESS/Realtek — well-hacked firmware scene) | Stream/ripping DSP; not GGUF. DVD = practice + maybe stream decode assist |
 | **CKS5TW / J3B / IMW1202** | BT audio SoC | CE exploit practice only |
@@ -291,21 +291,26 @@ SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 ---
 
-## qodesh GPU — strong reconsider (2026-08-29)
+## qodesh GPU — original intent (CUDA 6.5 back-compat)
 
-**Fact:** `llama-server --list-devices` → **`(none)`**. Card is **GeForce 8600 GT**, driver `9.18.13.4192`, **~256 MB** reported VRAM, compute **sm_1.1**.
+**Goal (do not drop):** take **existing small** models and run them on the **8600 GT** by **building llama.cpp / GGML backward-compatible with CUDA 6.5 / compute sm_1.1** — not by hoping modern Vulkan sees the card.
 
-| Idea | Verdict |
+**Facts today:**
+- Card: **GeForce 8600 GT**, ~224-256 MB VRAM, sm_1.1, driver `9.18.13.4192`
+- Modern pack: `llama-server --list-devices` -> **`(none)`** (Vulkan path is dead on this GPU)
+- Installer on shalom/LAN: `cuda_6.5.19_windows_general_64.exe` (md5 `63575eee...`); **do not casually run** on Win11 (driver risk) — see known-bugs / handoff
+- Toolchain for that era: **VS2013 + CUDA 6.5 nvcc** (not VS2022 as a fake). CMake/Ninja/Python as build hosts only
+- **0.5B Q4 file is 432 MiB** -> cannot **fully** reside in 224 MB VRAM; plan was always **partial offload / tiny `n-gpu-layers` + CPU mmap**, not "whole model in VRAM"
+
+| Track | Status |
 |---|---|
-| Put **0.5B / 4B / 7B GGUF** on the 8600 | **No.** VRAM ≪ model; no Vulkan device; sm_1.1 is not a modern GGML path. |
-| `agents.windows.json` **vulkan-all / hybrid-12** on this box | **Wrong host.** Those profiles are for a real Vulkan GPU (shalom). On qodesh they must never win — CPU profiles only (`cpu-2` / `cpu-4`, `--device none`). |
-| Install CUDA 6.5 for sm_1.1 | **No.** Installer on disk only; Win11 + 8600 driver risk (see known-bugs). Still cannot hold 0.5B Q4 in 224 MB. |
-| Use GPU for **non-LLM** (OSD, mailbox, CE) | Only if we invent a tiny custom kernel; **not** a model choice. |
-| What models *for the GPU* then? | **None.** qodesh LLM = **CPU Athlon II** only. Better quality ⇒ better **CPU** weights (still Q4, tiny) or move work to **shalom**. |
+| **Interim live GRZ** | CPU `--device none` (meas **3.0 tok/s**). `vulkan-all` / `hybrid-12` are **shalom** profiles — must not win on qodesh until a CUDA-1.1 build exists |
+| **Target GPU path** | Build GGML CUDA backend for **sm_1.1 / CUDA 6.5**; use **existing small** GGUFs (0.5B Q4 and smaller), offload what fits in 224 MB |
+| **Not the plan** | New giant models; stock Vulkan b10665 on this card; light driver replacement |
 
-**Partition:** leave the 8600 for display. All GRZ agents on qodesh: **CPU mmap**, GGML_VULKAN irrelevant / force `--device none`. Do not chase GPU models for this chassis.
+**Models for the GPU (when the back-compat binary exists):** same small artifacts we already have — start with **0.5B Q4** (and tinier drafts if any). Do **not** invent a new model family for the 8600.
 
----
+**Partition:** display on 8600; LLM = CPU **today**; GPU returns when **our** CUDA 6.5 build lights up devices, not when Vulkan does.
 
 ## Block layouts (all considered)
 
