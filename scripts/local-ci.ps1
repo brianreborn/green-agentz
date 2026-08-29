@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Continue'
 $Root = 'C:\Users\brian\Documents\green-roomz'
 $Node = 'C:\Program Files\nodejs\node.exe'
 $Log = Join-Path $Root 'data\local-ci.log'
-$IntervalSec = 30
+$IntervalSec = 900
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'data') | Out-Null
 
 function Stamp { Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK' }
