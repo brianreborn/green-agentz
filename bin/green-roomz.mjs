@@ -37,11 +37,11 @@ Commands:
 async function bootstrap(args) {
   const manifestPath = argValue(args, '--manifest');
   const manifest = await loadManifest(manifestPath);
-  const registry = await new AgentRegistry(manifest).inspect();
   const runtime = manifest.runtimes?.llama_server?.command;
   const hostAdapter = process.platform === 'win32'
     ? new WindowsHostAdapter({ runtimeCommand: runtime })
     : new WindowsHostAdapter({ runtimeCommand: runtime });
+  const registry = await new AgentRegistry(manifest).inspect({ hostAdapter });
   const processes = new ProcessManager({ manifest, registry, hostAdapter });
   const policy = new PolicyGate(manifest.gateway.policy);
   const sessions = new SessionLedger({

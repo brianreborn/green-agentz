@@ -14,7 +14,8 @@ async function withServer(t, extras = {}) {
   const manifest = sampleManifest();
   const registry = await new AgentRegistry(manifest).inspect();
   for (const alias of extras.ready ?? []) registry.setStatus(alias, 'ready');
-  const processes = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('should not spawn in this test'); } });
+  const hostAdapter = extras.hostAdapter ?? { sampleResources() { return { freeMemoryBytes: 1 }; } };
+  const processes = new ProcessManager({ manifest, registry, hostAdapter, spawnImpl() { throw new Error('should not spawn in this test'); } });
   processes.ensure = async (agent) => {
     if (extras.visitedBlock?.has(agent.alias)) throw new Error(`refused ensure of visited ${agent.alias}`);
     return { alias: agent.alias, state: 'ready', resident: agent.alias === 'tool-router-agent' };
@@ -25,7 +26,7 @@ async function withServer(t, extras = {}) {
     processes,
     sessions: extras.sessions ?? new SessionLedger(),
     policy: new PolicyGate('maximize'),
-    hostAdapter: { sampleResources() { return { freeMemoryBytes: 1 }; } },
+    hostAdapter,
     fetchImpl: extras.fetchImpl,
   });
   const server = await gateway.listen('127.0.0.1', 0);
@@ -227,4 +228,32 @@ test('actual image part still routes to vision without asking the nexus', async 
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'vision-layout-agent');
   assert.equal(result.headers['x-green-roomz-route-reason'], 'image_input');
   assert.equal(nexusHits, 0);
+});
+
+test('consultNexus omits impractical aliases from AVAILABLE the way unused vision/audio are omitted', async (t) => {
+  const enums = [];
+  const { server, registry } = await withServer(t, {
+    ready: ['tool-router-agent', 'qwenstral-code-speculator', 'general-text-speculator'],
+    fetchImpl: async (url, init) => {
+      const href = String(url);
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      if (href.includes(':18187')) {
+        enums.push(body.json_schema?.properties?.route?.enum ?? []);
+        assert.equal(enums.at(-1).includes('qwenstral-code-speculator'), false);
+        assert.equal(enums.at(-1).includes('vision-layout-agent'), false);
+        return jsonFetch({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'general-text-speculator', confidence: 0.7, reason: 'text' }) } }] });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'hello from text' } }] });
+    },
+  });
+  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:estimate 9800000000 + headroom 2147483648 > free 11000000000'] });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { model: 'tool-router-agent', messages: [{ role: 'user', content: 'write a python function named hello' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
+  assert.ok(enums.length >= 1);
 });

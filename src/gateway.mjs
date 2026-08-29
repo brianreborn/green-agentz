@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, NEXUS_ALIAS } from './constants.mjs';
+import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import { Mailbox } from './mailbox.mjs';
 import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
 import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
-import { detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
+import { aliasCanAdmit, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
 import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
@@ -15,6 +16,7 @@ const EXPLICIT_ROUTES = new Set([
   '/v1/models',
   '/props',
   '/metrics',
+  '/v1/monitor/recent',
   '/v1/chat/completions',
   '/v1/chat/completions/route',
   '/v1/embeddings',
@@ -103,7 +105,7 @@ function isChatPath(pathname) {
 }
 
 export class Gateway {
-  constructor({ manifest, registry, processes, sessions, policy, hostAdapter, fetchImpl }) {
+  constructor({ manifest, registry, processes, sessions, policy, hostAdapter, fetchImpl, mailbox }) {
     this.manifest = manifest;
     this.registry = registry;
     this.processes = processes;
@@ -113,6 +115,7 @@ export class Gateway {
     this.fetchImpl = fetchImpl ?? fetch;
     this.apiKey = process.env.GREEN_ROOMZ_API_KEY || '';
     this.startedAt = Date.now();
+    this.mailbox = mailbox ?? new Mailbox();
   }
 
   bindAddress(host) {
@@ -147,6 +150,9 @@ export class Gateway {
       }
       if (url.pathname === '/health' || url.pathname === '/v1/health') {
         return jsonResponse(response, 200, this.health(), cors);
+      }
+      if (url.pathname === '/v1/monitor/recent') {
+        return jsonResponse(response, 200, { object: 'list', data: this.mailbox.recent(), stats: this.mailbox.stats() }, cors);
       }
       if (url.pathname === '/v1/models') {
         return jsonResponse(response, 200, { object: 'list', data: this.registry.listModels() }, cors);
@@ -191,6 +197,7 @@ export class Gateway {
       uptime_ms: Date.now() - this.startedAt,
       policy: this.policy.policy,
       agents: models,
+      mailbox: this.mailbox.stats(),
     };
   }
 
@@ -209,6 +216,69 @@ export class Gateway {
       })),
       resources: this.hostAdapter?.sampleResources?.() ?? null,
     };
+  }
+
+  observeHop(kind, source, extra = {}) {
+    try {
+      this.mailbox.push({
+        kind,
+        source: source ?? '',
+        ticket: extra.ticket ?? '',
+        payload: extra.payload ?? {},
+      });
+    } catch {}
+  }
+
+  handleMonitorSnapshot(request, response, body, identity, session, cors) {
+    const alias = MONITOR_ALIAS;
+    const issuedSession = session?.id ?? this.sessions.create({
+      identity,
+      agentAlias: alias,
+      modality: detectModalities(body),
+    });
+    if (session?.id) this.sessions.setAgentAlias(issuedSession, alias);
+    this.observeHop('success', alias, { ticket: issuedSession, payload: { reason: 'mailbox', hops: [alias] } });
+    const routed = { requestedAlias: body.model ?? alias, effectiveAlias: alias, reason: 'mailbox' };
+    return jsonResponse(response, 200, {
+      id: `grz-monitor-${issuedSession}`,
+      object: 'chat.completion',
+      model: alias,
+      choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ alias, runtime: 'logical', mailbox: this.mailbox.recent(), stats: this.mailbox.stats() }) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    }, this.routeHeaders(issuedSession, routed, cors, { hops: alias }));
+  }
+
+  async completeOnResident(request, response, body, issuedSession, cors, hops, reason) {
+    const alias = NEXUS_ALIAS;
+    const availability = this.registry.status(alias);
+    if (!this.registry.agents.has(alias) || availability.state === 'unavailable') {
+      this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'resident_unavailable' } });
+      throw new UnavailableError(`${alias} is unavailable`, availability.missing);
+    }
+    const agent = this.registry.get(alias);
+    hops.push(alias);
+    await this.processes.ensure(agent, { signal: request.abortSignal });
+    const payload = { ...prepareInferenceBody(body, agent), stream: false };
+    const path = '/v1/chat/completions';
+    const target = `http://127.0.0.1:${agent.port}${path}`;
+    this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
+    this.sessions.setAgentAlias(issuedSession, alias);
+    const headers = this.routeHeaders(
+      issuedSession,
+      { requestedAlias: body.model ?? null, effectiveAlias: alias, reason },
+      cors,
+      { hops: hops.join(',') },
+    );
+    for (const [key, value] of Object.entries(headers)) response.setHeader(key, value);
+    return proxyJson({
+      request,
+      response,
+      body: payload,
+      target,
+      config: this.manifest.gateway,
+      signal: request.abortSignal,
+      fetchImpl: this.fetchImpl,
+    });
   }
 
   routeHeaders(issuedSession, routed, cors, extra = {}) {
@@ -233,6 +303,10 @@ export class Gateway {
 
     if (!isChatPath(pathname ?? request.url?.split('?')[0])) {
       return this.handleDirectAlias(request, response, body, identity, session, cors);
+    }
+
+    if (body.model === MONITOR_ALIAS) {
+      return this.handleMonitorSnapshot(request, response, body, identity, session, cors);
     }
 
     return this.handleChatTurn(request, response, body, identity, session, cors, pathname);
@@ -360,13 +434,21 @@ export class Gateway {
 
     const release = await this.policy.acquire(request.abortSignal);
     try {
+      if (hard.effectiveAlias === NEXUS_ALIAS) {
+        return await this.completeOnResident(request, response, body, issuedSession, cors, hops, hard.reason ?? 'lock_alias');
+      }
+      let peekedSpecialist = false;
       while (hops.length < MAX_SPECIALIST_HOPS) {
         let alias;
         let reason;
         if (hops.length === 0 && hard.effectiveAlias) {
           alias = hard.effectiveAlias;
           reason = hard.reason;
-          if (!isRoutableAlias(this.registry, alias)) {
+          if (alias === MONITOR_ALIAS) {
+            return this.handleMonitorSnapshot(request, response, body, identity, session, cors);
+          }
+          if (!isRoutableAlias(this.registry, alias) || !aliasCanAdmit(this.registry, alias, this.processes)) {
+            this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: hard.reason } });
             throw new UnavailableError(`${alias} is unavailable`, this.registry.status(alias).missing);
           }
         } else {
@@ -384,10 +466,11 @@ export class Gateway {
         }
 
         if (!alias || visited.has(alias) || alias === NEXUS_ALIAS) break;
-        if (!isRoutableAlias(this.registry, alias)) {
+        if (!isRoutableAlias(this.registry, alias) || !aliasCanAdmit(this.registry, alias, this.processes)) {
           visited.add(alias);
           hops.push(alias);
-          notes.push(stripControls(`${alias} unavailable (missing model)`));
+          notes.push(stripControls(`${alias} unavailable (impractical or missing)`));
+          this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'unavailable', hops: hops.slice() } });
           continue;
         }
 
@@ -395,11 +478,22 @@ export class Gateway {
         hops.push(alias);
         const agent = this.registry.get(alias);
         const record = await this.processes.ensure(agent, { signal: request.abortSignal });
-        if (record?.logical) throw new UnavailableError(`${alias} has no physical backend to proxy`);
+        if (record?.logical) {
+          this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
+          this.sessions.setAgentAlias(issuedSession, alias);
+          return jsonResponse(response, 200, {
+            id: `grz-monitor-${issuedSession}`,
+            object: 'chat.completion',
+            model: alias,
+            choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ alias, runtime: 'logical', mailbox: this.mailbox.recent(), stats: this.mailbox.stats() }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+          }, hopHeaders(alias, reason));
+        }
 
         const payload = prepareInferenceBody(body, agent);
         const path = String((pathname ?? request.url.split('?')[0])).replace(/\/route$/, '') || '/v1/chat/completions';
         const target = `http://127.0.0.1:${agent.port}${path}`;
+        peekedSpecialist = true;
         const peek = await peekSpecialist({
           fetchImpl: this.fetchImpl,
           request,
@@ -415,6 +509,7 @@ export class Gateway {
           continue;
         }
 
+        this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
         if (session?.id) this.sessions.setAgentAlias(issuedSession, alias);
         else this.sessions.setAgentAlias(issuedSession, alias);
         const headers = hopHeaders(alias, reason);
@@ -422,6 +517,10 @@ export class Gateway {
         return deliverPeek({ peek, request, response, body: payload, headers });
       }
 
+      if (!peekedSpecialist && this.registry.agents.has(NEXUS_ALIAS) && this.registry.status(NEXUS_ALIAS).state !== 'unavailable') {
+        return await this.completeOnResident(request, response, body, issuedSession, cors, hops, 'resident_fallback');
+      }
+      this.observeHop('route_exhausted', hops[hops.length - 1] ?? '', { ticket: issuedSession, payload: { hops: hops.slice(), visited: [...visited] } });
       return jsonResponse(response, 422, {
         error: {
           type: 'route_exhausted',

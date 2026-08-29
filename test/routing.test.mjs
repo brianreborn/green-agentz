@@ -79,3 +79,24 @@ test('translation is not inferred from foreign-looking text', () => {
   assert.equal(isExplicitTranslationRequest({ messages: [{ role: 'user', content: 'Bonjour, comment ça va?' }] }), false);
   assert.equal(isExplicitTranslationRequest({ messages: [{ role: 'user', content: 'Please translate this to English' }] }), true);
 });
+
+test('requested security-monitor-agent pins to mailbox without nexus', () => {
+  const routed = hardRuleRoute({
+    model: 'security-monitor-agent',
+    messages: [{ role: 'user', content: 'snapshot' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, 'security-monitor-agent');
+  assert.equal(routed.reason, 'mailbox');
+});
+
+test('lock_alias can pin the resident nexus', () => {
+  const reg = registry();
+  reg.setStatus('tool-router-agent', 'ready');
+  const routed = hardRuleRoute({
+    lock_alias: true,
+    model: 'tool-router-agent',
+    messages: [{ role: 'user', content: 'ping' }],
+  }, reg);
+  assert.equal(routed.effectiveAlias, 'tool-router-agent');
+  assert.equal(routed.reason, 'lock_alias');
+});

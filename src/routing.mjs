@@ -1,5 +1,6 @@
 import { ValidationError } from './errors.mjs';
-import { NEXUS_ALIAS } from './constants.mjs';
+import { MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import { agentCanAdmit } from './memory.mjs';
 
 function inspectContentPart(part, found) {
   if (!part || typeof part !== 'object') return;
@@ -58,12 +59,32 @@ export function isRoutableAlias(registry, alias) {
   return registry.status(alias).state !== 'unavailable';
 }
 
+export function aliasCanAdmit(registry, alias, processes) {
+  if (!alias || !registry.agents.has(alias)) return false;
+  if (ROUTER_SENTINELS.has(alias)) return false;
+  const status = registry.status(alias);
+  if (status.state === 'unavailable') return false;
+  if ((status.missing ?? []).some((reason) => String(reason).startsWith('impractical'))) return false;
+  const agent = registry.agents.get(alias);
+  if (agent.runtime === 'logical') return true;
+  if (status.state === 'ready') return true;
+  let freeMemoryBytes;
+  try {
+    freeMemoryBytes = processes?.hostAdapter?.sampleResources?.()?.freeMemoryBytes;
+  } catch {
+    freeMemoryBytes = undefined;
+  }
+  return agentCanAdmit(agent, { freeMemoryBytes }).ok;
+}
+
 export function availableAliases(registry, visited = new Set()) {
   const names = [];
   for (const alias of registry.agents.keys()) {
     if (ROUTER_SENTINELS.has(alias)) continue;
     if (visited.has(alias)) continue;
-    if (registry.status(alias).state === 'unavailable') continue;
+    const status = registry.status(alias);
+    if (status.state === 'unavailable') continue;
+    if ((status.missing ?? []).some((reason) => String(reason).startsWith('impractical'))) continue;
     names.push(alias);
   }
   return names;
@@ -150,8 +171,14 @@ export function hardRuleRoute(body, registry) {
   if (slash && slash.alias) {
     return finish(body, registry, slash.alias, `slash_${slash.token}`, modality);
   }
+  if (body?.model === MONITOR_ALIAS && registry.agents.has(MONITOR_ALIAS)) {
+    return finish(body, registry, MONITOR_ALIAS, 'mailbox', modality);
+  }
   if (body?.lock_alias === true) {
     const requested = body.model ?? null;
+    if (requested === NEXUS_ALIAS && registry.agents.has(requested) && registry.status(requested).state !== 'unavailable') {
+      return finish(body, registry, requested, 'lock_alias', modality);
+    }
     if (requested && isRoutableAlias(registry, requested)) {
       return finish(body, registry, requested, 'lock_alias', modality);
     }

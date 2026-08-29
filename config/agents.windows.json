@@ -194,6 +194,14 @@
       "required_artifacts": ["model"],
       "system_policy": "policies/image-generation.md",
       "profiles": []
+    },
+    {
+      "alias": "security-monitor-agent",
+      "description": "Async mailbox security monitor (PQ-style ring). Producers push and return immediately; not a GGUF.",
+      "runtime": "logical",
+      "native_capabilities": ["text", "json"],
+      "gateway_accepted_capabilities": ["text"],
+      "system_policy": "policies/security-monitor.md"
     }
   ],
   "optional_agents": [

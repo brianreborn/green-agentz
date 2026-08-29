@@ -5,7 +5,7 @@ import { ValidationError } from '../src/errors.mjs';
 import { sampleManifest } from './helpers.mjs';
 import { REQUIRED_ALIASES } from '../src/constants.mjs';
 
-test('windows manifest has exactly ten required aliases and no translation agent', async () => {
+test('windows manifest has exactly eleven required aliases and no translation agent', async () => {
   const manifest = await loadManifest();
   const aliases = manifest.agents.map((agent) => agent.alias);
   assert.deepEqual([...aliases].sort(), [...REQUIRED_ALIASES].sort());
@@ -14,6 +14,10 @@ test('windows manifest has exactly ten required aliases and no translation agent
   assert.equal(manifest.agents.find((agent) => agent.alias === 'general-text-speculator').draft_type, 'draft-eagle3');
   assert.equal(manifest.agents.find((agent) => agent.alias === 'qwenstral-code-speculator').profiles[0].id, 'vulkan-all');
   assert.equal(manifest.agents.find((agent) => agent.alias === 'general-text-speculator').profiles[0].id, 'vulkan-all');
+  const monitor = manifest.agents.find((agent) => agent.alias === 'security-monitor-agent');
+  assert.equal(monitor.runtime, 'logical');
+  assert.equal(monitor.model, undefined);
+  assert.equal(monitor.required_artifacts, undefined);
 });
 
 test('secrets are prohibited in manifests', () => {

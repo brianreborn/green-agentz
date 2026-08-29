@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { FALLBACK_ALIAS, NEXUS_ALIAS, NEXUS_MAX_TOKENS } from './constants.mjs';
+import { FALLBACK_ALIAS, MONITOR_ALIAS, NEXUS_ALIAS, NEXUS_MAX_TOKENS } from './constants.mjs';
 import { planRoute } from './logical-router.mjs';
-import { availableAliases, detectModalities, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
+import { aliasCanAdmit, availableAliases, detectModalities, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
 import { stripControls } from './util.mjs';
 
 function withNexusPolicy(payload, agent) {
@@ -69,6 +69,7 @@ const ALIAS_HINTS = {
   'semantic-embedding-agent': 'embeddings',
   'retrieval-rerank-agent': 'rerank',
   'safety-policy-agent': 'safety classify',
+  'security-monitor-agent': 'oversight, isolation, mailbox, monitor queries',
 };
 
 function fenceUserText(text) {
@@ -117,7 +118,7 @@ function routeIsBad(plan, registry, visited, body) {
   if (!registry.agents.has(route)) return `${route} unknown`;
   if (!isRoutableAlias(registry, route)) {
     const missing = registry.status(route).missing ?? [];
-    const why = missing.length ? 'missing model' : 'unavailable';
+    const why = missing.some((reason) => String(reason).startsWith('impractical')) ? 'impractical' : (missing.length ? 'missing model' : 'unavailable');
     return `${route} unavailable (${why})`;
   }
   if (body) {
@@ -139,17 +140,24 @@ function allowlistedPlan(plan, registry) {
   };
 }
 
+
+export function nexusCandidateAliases(registry, visited, body, processes) {
+  const mod = detectModalities(body);
+  return availableAliases(registry, visited).filter((alias) => {
+    if (alias === 'vision-layout-agent' && !mod.image) return false;
+    if (alias === 'audio-transcription-agent' && !mod.audio) return false;
+    if (alias === MONITOR_ALIAS) return false;
+    if (!aliasCanAdmit(registry, alias, processes)) return false;
+    return true;
+  });
+}
+
 async function postNexus({ processes, registry, fetchImpl, body, visited, notes, constraint, signal }) {
   const nexus = registry.get(NEXUS_ALIAS);
   const record = await processes.ensure(nexus, { signal });
   if (record?.logical) throw new Error('nexus is logical');
   const userText = latestUserMessageText(body);
-  const mod = detectModalities(body);
-  const aliases = availableAliases(registry, visited).filter((alias) => {
-    if (alias === 'vision-layout-agent' && !mod.image) return false;
-    if (alias === 'audio-transcription-agent' && !mod.audio) return false;
-    return true;
-  });
+  const aliases = nexusCandidateAliases(registry, visited, body, processes);
   const prompt = buildNexusPrompt({ userText, aliases, visited, notes, constraint });
   const payload = withNexusPolicy({
     model: NEXUS_ALIAS,
@@ -195,8 +203,12 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
   const status = nexus ? registry.status(NEXUS_ALIAS) : { state: 'unavailable' };
   const live = nexus && status.state !== 'unavailable';
   const stripped = stripSlashCommand(body ?? {});
+  const candidates = nexusCandidateAliases(registry, visited, stripped, processes);
+
+  const admitOk = (alias) => alias && aliasCanAdmit(registry, alias, processes);
 
   const ask = async (constraint) => {
+    if (!candidates.length) return { route: null, confidence: 0, reason: 'no_admittable_specialist' };
     if (!live) return offlinePlan(stripped, registry, visited);
     try {
       return await postNexus({ processes, registry, fetchImpl, body: stripped, visited, notes, constraint, signal });
@@ -207,16 +219,22 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
 
   let plan = await ask();
   let bad = routeIsBad(plan, registry, visited, stripped);
+  if (!bad && plan?.route && !admitOk(plan.route)) {
+    bad = `${plan.route} unavailable (impractical)`;
+  }
   if (bad) {
     plan = await ask(bad);
     bad = routeIsBad(plan, registry, visited, stripped);
+    if (!bad && plan?.route && !admitOk(plan.route)) {
+      bad = `${plan.route} unavailable (impractical)`;
+    }
   }
   const offline = offlinePlan(stripped, registry, visited);
   if (bad) {
-    if (!routeIsBad(offline, registry, visited, stripped)) {
+    if (!routeIsBad(offline, registry, visited, stripped) && admitOk(offline.route)) {
       return { ...offline, reason: `${offline.reason}|after:${bad}` };
     }
-    if (isRoutableAlias(registry, FALLBACK_ALIAS) && !visited.has(FALLBACK_ALIAS)) {
+    if (isRoutableAlias(registry, FALLBACK_ALIAS) && !visited.has(FALLBACK_ALIAS) && admitOk(FALLBACK_ALIAS)) {
       return { route: FALLBACK_ALIAS, confidence: 0.4, reason: 'fallback_text', constraint: bad };
     }
     return { route: null, confidence: 0, reason: 'no_route', constraint: bad };
@@ -227,7 +245,7 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
     && offline.route !== FALLBACK_ALIAS
     && (offline.confidence ?? 0) >= 0.7;
   const junkReason = liveReason === 'short' || liveReason === 'hello' || liveReason === 'short-token';
-  if (nexusDefaulted || (junkReason && offline.route && offline.route !== plan.route && (offline.confidence ?? 0) >= 0.7)) {
+  if ((nexusDefaulted || (junkReason && offline.route && offline.route !== plan.route && (offline.confidence ?? 0) >= 0.7)) && admitOk(offline.route)) {
     return { ...offline, reason: `nexus_overruled:${plan.route}|${offline.reason}` };
   }
   return {

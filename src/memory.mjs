@@ -41,4 +41,31 @@ export function profileAdmitted(agent, profile, { freeMemoryBytes, includeDraft 
   };
 }
 
+export function agentCanAdmit(agent, { freeMemoryBytes, includeDraft } = {}) {
+  if (!agent || agent.runtime === 'logical') {
+    return { ok: true, reason: 'logical', estimateBytes: null, headroomBytes: headroomBytes() };
+  }
+  const profiles = agent.profiles?.length ? agent.profiles : [{ id: 'default', args: [] }];
+  const draft = includeDraft ?? Boolean(agent.draft_enabled && agent.draft_model);
+  let admitted = null;
+  let unknown = null;
+  let impractical = null;
+  for (const profile of profiles) {
+    const admission = profileAdmitted(agent, profile, { freeMemoryBytes, includeDraft: draft });
+    const tagged = { ...admission, profileId: profile.id };
+    if (admission.ok && admission.reason === 'admitted') {
+      if (!admitted) admitted = tagged;
+    } else if (admission.ok) {
+      if (!unknown) unknown = tagged;
+    } else if (admission.reason === 'impractical') {
+      if (!impractical || (admission.estimateBytes ?? 0) > (impractical.estimateBytes ?? 0)) impractical = tagged;
+    }
+  }
+  if (admitted) return admitted;
+  // A CPU-impractical specialist must not hop via Vulkan/"unknown" GPU just because those profiles skip the RAM check.
+  if (impractical) return impractical;
+  if (unknown) return unknown;
+  return { ok: true, reason: 'unknown', estimateBytes: null, headroomBytes: headroomBytes() };
+}
+
 export { artifactSizeBytes, cpuResidentWeightBytes, profileKeepsWeightsOnCpu };

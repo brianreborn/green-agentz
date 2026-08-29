@@ -38,6 +38,7 @@ export function sampleManifest(overrides = {}) {
       agent('safety-policy-agent', { native_capabilities: ['text', 'classification', 'json'], gateway_accepted_capabilities: ['text'], runtime: 'llama_server', port: 18188, model: '/tmp/missing-safety.gguf' }),
       agent('speech-synthesis-agent', { native_capabilities: ['text', 'audio-output'], gateway_accepted_capabilities: ['text'], runtime: 'piper', port: 18189, model: '/tmp/missing-voice.onnx' }),
       agent('image-generation-agent', { native_capabilities: ['text', 'image-output'], gateway_accepted_capabilities: ['text'], runtime: 'stable_diffusion', port: 18190, model: '/tmp/missing-sd.gguf' }),
+      agent('security-monitor-agent', { native_capabilities: ['text', 'json'], gateway_accepted_capabilities: ['text'], runtime: 'logical' }),
     ],
   });
 }

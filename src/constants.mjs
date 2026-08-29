@@ -9,6 +9,7 @@ export const REQUIRED_ALIASES = Object.freeze([
   'safety-policy-agent',
   'speech-synthesis-agent',
   'image-generation-agent',
+  'security-monitor-agent',
 ]);
 
 export const POLICIES = Object.freeze({
@@ -21,6 +22,7 @@ export const TRANSLATION_ALIAS = 'translation-agent';
 export const DEFAULT_MANIFEST = new URL('../config/agents.windows.json', import.meta.url);
 
 export const NEXUS_ALIAS = 'tool-router-agent';
+export const MONITOR_ALIAS = 'security-monitor-agent';
 export const FALLBACK_ALIAS = 'general-text-speculator';
 export const MAX_SPECIALIST_HOPS = 2;
 export const HANDOFF_PEEK_CHARS = 48;

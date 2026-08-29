@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { estimateResidentBytes, headroomBytes, profileAdmitted } from '../src/memory.mjs';
+import { agentCanAdmit, estimateResidentBytes, headroomBytes, profileAdmitted } from '../src/memory.mjs';
 
 const GiB = 1024 ** 3;
 const MODEL_BYTES = Math.round(4.36 * GiB);
@@ -80,4 +80,21 @@ test('missing model is admitted as unknown rather than rejected', () => {
   assert.equal(admitted.ok, true);
   assert.equal(admitted.estimateBytes, null);
   assert.equal(admitted.reason, 'unknown');
+});
+
+test('agentCanAdmit is false when CPU is impractical even if a GPU profile is unknown', () => {
+  const { model, cleanup } = withModel();
+  try {
+    const agent = {
+      alias: 'qwenstral-code-speculator',
+      model,
+      draft_enabled: false,
+      profiles: [cpuProfile(), gpuProfile()],
+    };
+    const result = agentCanAdmit(agent, { freeMemoryBytes: 5 * GiB, includeDraft: false });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'impractical');
+  } finally {
+    cleanup();
+  }
 });

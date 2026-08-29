@@ -1,10 +1,16 @@
 import { fileExists } from './util.mjs';
 import { ValidationError } from './errors.mjs';
+import { agentCanAdmit } from './memory.mjs';
 
 function routingBehavior(alias) {
   if (alias === 'tool-router-agent') return 'nexus';
+  if (alias === 'security-monitor-agent') return 'mailbox';
   if (alias === 'vision-layout-agent' || alias === 'audio-transcription-agent') return 'modality_override';
   return 'explicit';
+}
+
+function isResidentAgent(agent) {
+  return Boolean(agent?.resident) || agent?.alias === 'tool-router-agent';
 }
 
 export class AgentRegistry {
@@ -14,7 +20,13 @@ export class AgentRegistry {
     this.availability = new Map();
   }
 
-  async inspect() {
+  async inspect({ hostAdapter } = {}) {
+    let freeMemoryBytes;
+    try {
+      freeMemoryBytes = hostAdapter?.sampleResources?.()?.freeMemoryBytes;
+    } catch {
+      freeMemoryBytes = undefined;
+    }
     for (const agent of this.agents.values()) {
       const missing = [];
       if (agent.runtime !== 'logical') {
@@ -24,8 +36,16 @@ export class AgentRegistry {
       for (const field of agent.required_artifacts ?? []) {
         if (!(await fileExists(agent[field]))) missing.push(`${field}:${agent[field] ?? '<unset>'}`);
       }
+      let state = missing.length ? 'unavailable' : agent.runtime === 'logical' ? 'ready' : 'cold';
+      if (state === 'cold' && !isResidentAgent(agent)) {
+        const admission = agentCanAdmit(agent, { freeMemoryBytes });
+        if (!admission.ok) {
+          state = 'unavailable';
+          missing.push(`impractical:${admission.reason}:estimate ${admission.estimateBytes} + headroom ${admission.headroomBytes} > free ${freeMemoryBytes}`);
+        }
+      }
       this.availability.set(agent.alias, {
-        state: missing.length ? 'unavailable' : agent.runtime === 'logical' ? 'ready' : 'cold',
+        state,
         missing,
       });
     }

@@ -10,6 +10,7 @@ import { PolicyGate } from '../src/scheduler.mjs';
 import { SessionLedger } from '../src/sessions.mjs';
 import { Gateway, prepareInferenceBody } from '../src/gateway.mjs';
 import { sampleManifest } from './helpers.mjs';
+import { REQUIRED_ALIASES } from '../src/constants.mjs';
 
 async function withServer(t, env = {}, extras = {}) {
   const previous = { ...process.env };
@@ -17,7 +18,8 @@ async function withServer(t, env = {}, extras = {}) {
   const manifest = sampleManifest();
   const registry = await new AgentRegistry(manifest).inspect();
   for (const alias of extras.ready ?? []) registry.setStatus(alias, 'ready');
-  const processes = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('should not spawn in this test'); } });
+  const hostAdapter = extras.hostAdapter ?? { sampleResources() { return { freeMemoryBytes: 1 }; } };
+  const processes = new ProcessManager({ manifest, registry, hostAdapter, spawnImpl() { throw new Error('should not spawn in this test'); } });
   if (extras.stubEnsure) {
     processes.ensure = async (agent) => ({ alias: agent.alias, state: 'ready' });
   }
@@ -27,7 +29,7 @@ async function withServer(t, env = {}, extras = {}) {
     processes,
     sessions: extras.sessions ?? new SessionLedger(),
     policy: new PolicyGate('maximize'),
-    hostAdapter: { sampleResources() { return { freeMemoryBytes: 1 }; } },
+    hostAdapter,
     fetchImpl: extras.fetchImpl,
   });
   const server = await gateway.listen('127.0.0.1', 0);
@@ -76,7 +78,7 @@ test('health is degraded when artifacts are missing and models stay truthful', a
   const vision = health.body.agents.find((agent) => agent.id === 'vision-layout-agent');
   assert.deepEqual(vision.native_capabilities, ['text', 'image']);
   const models = await request(server, { path: '/v1/models' });
-  assert.equal(models.body.data.length, 10);
+  assert.equal(models.body.data.length, REQUIRED_ALIASES.length);
 });
 
 test('logical router returns a plan only when route_plan_only is set', async (t) => {
@@ -288,4 +290,137 @@ test('system policy is prepended even when the client already sent a system mess
   assert.equal(kept.messages[0].content, 'Be concise.\n');
   assert.equal(kept.messages[1].content, 'already');
   assert.equal(kept.messages.length, 3);
+});
+
+test('health includes mailbox stats and GET /v1/monitor/recent is cheap', async (t) => {
+  const { server } = await withServer(t);
+  const health = await request(server, { path: '/v1/health' });
+  assert.equal(typeof health.body.mailbox.capacity, 'number');
+  assert.equal(typeof health.body.mailbox.pushed, 'number');
+  const recent = await request(server, { path: '/v1/monitor/recent' });
+  assert.equal(recent.status, 200);
+  assert.ok(Array.isArray(recent.body.data));
+  assert.equal(typeof recent.body.stats.dropped, 'number');
+});
+
+test('completion hop pushes to mailbox without awaiting drain', async (t) => {
+  const { server, gateway } = await withServer(t, {}, {
+    ready: ['qwenstral-code-speculator'],
+    stubEnsure: true,
+    fetchImpl: async () => jsonFetch({
+      choices: [{ message: { role: 'assistant', content: 'def hello():\n    return 1\n' } }],
+    }),
+  });
+  const before = gateway.mailbox.stats().pushed;
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: 'write a python function named hello' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.ok(gateway.mailbox.stats().pushed > before);
+  const last = gateway.mailbox.recent(1)[0];
+  assert.equal(last.kind, 'success');
+  assert.equal(last.source, 'qwenstral-code-speculator');
+});
+
+test('POST security-monitor-agent snapshots mailbox without consulting nexus', async (t) => {
+  let fetches = 0;
+  const { server, gateway } = await withServer(t, {}, {
+    fetchImpl: async () => {
+      fetches += 1;
+      throw new Error('nexus/llama must not be consulted for the monitor alias');
+    },
+  });
+  const before = gateway.mailbox.stats().pushed;
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { model: 'security-monitor-agent', messages: [{ role: 'user', content: 'snapshot' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'security-monitor-agent');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'mailbox');
+  const snapshot = JSON.parse(result.body.choices[0].message.content);
+  assert.equal(snapshot.runtime, 'logical');
+  assert.equal(snapshot.alias, 'security-monitor-agent');
+  assert.ok(gateway.mailbox.stats().pushed > before);
+  assert.equal(fetches, 0);
+  const recent = await request(server, { path: '/v1/monitor/recent' });
+  assert.equal(recent.status, 200);
+  assert.ok(recent.body.stats.pushed > 0);
+  assert.equal(recent.body.data.at(-1).source, 'security-monitor-agent');
+  const health = await request(server, { path: '/health' });
+  assert.ok(health.body.mailbox.pushed > 0);
+});
+
+test('lock_alias pins a tiny prompt to the resident 0.5B nexus', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      assert.equal(body.model, 'tool-router-agent');
+      assert.equal(body.messages.some((message) => String(message.content ?? '').includes('AVAILABLE:')), false);
+      assert.match(JSON.stringify(body.messages), /ping-router/);
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'pong-from-router' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      model: 'tool-router-agent',
+      lock_alias: true,
+      max_tokens: 8,
+      messages: [{ role: 'user', content: 'ping-router' }],
+    },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.body.choices[0].message.content, 'pong-from-router');
+  assert.equal(urls.length, 1);
+  assert.match(urls[0], /18187/);
+});
+
+test('impractical specialist is not started; completion stays on the resident nexus', async (t) => {
+  const urls = [];
+  const { server, registry, processes } = await withServer(t, {}, {
+    ready: ['tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      assert.equal(String(url).includes(':18183'), false, 'must not hop to qwenstral-code-speculator');
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      assert.equal(body.messages.some((message) => String(message.content ?? '').includes('AVAILABLE:')), false);
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
+    },
+  });
+  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  registry.setStatus('general-text-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  const ensured = [];
+  const original = processes.ensure;
+  processes.ensure = async (agent) => {
+    ensured.push(agent.alias);
+    return original(agent);
+  };
+  const t0 = Date.now();
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { model: 'tool-router-agent', messages: [{ role: 'user', content: 'write a python function named hello' }] },
+  });
+  const elapsed = Date.now() - t0;
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.body.choices[0].message.content, 'resident-ok');
+  assert.equal(ensured.includes('qwenstral-code-speculator'), false);
+  assert.ok(elapsed < 2000, `resident fallback took ${elapsed}ms`);
+  assert.equal(urls.every((url) => url.includes('18187')), true);
 });
