@@ -2,15 +2,23 @@
 
 Green-Agentz is the integration repository for the Green agent fleet.
 
-## Current subsystem imports
+## Project model
 
-- `systems/green-roomz`: shared inference gateway and runtime, imported from
-  `brianreborn/green-roomz` `main`.
-- `systems/green-zkillz`: portable skills and capability pack, imported from
-  the repository currently hosted as `brianreborn/green-agency`.
+- **Green-Agentz** is the project and top-level repository. It succeeds the
+  historical Green-Agency project name.
+- **Green-Zkillz** is the portable capability layer inside Green-Agentz. Its
+  capabilities are applied to suitable agents through `/skill` commands; it is
+  not a sibling daemon or independent runtime.
+- `systems/green-roomz` is the shared inference gateway and runtime, imported
+  from `brianreborn/green-roomz` `main`.
 - `systems/green-shepherdz`: reserved for the protected monitor system. Its
   Sentinel, Council, and Warden boundaries require joint review before code is
   extracted from the historical Green-Roomz location.
+
+The existing `systems/green-zkillz` subtree is a provenance-preserving import
+of the repository currently hosted as `brianreborn/green-agency`. Its skill
+content will move into the Green-Agentz project layout after root-file and
+legacy-trigger conflicts are classified.
 
 ## Host branches
 
@@ -27,4 +35,3 @@ branches through reviewed merges.
 4. The unrelated historical `green-roomz` `master` lineage is retained as a
    Git reference, not copied into the canonical source tree.
 5. No host overlay may silently modify another host's configuration.
-
