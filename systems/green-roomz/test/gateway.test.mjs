@@ -159,7 +159,7 @@ test('omitted model with a python function proxies to the code alias', async (t)
   assert.match(result.body.choices[0].message.content, /def add/);
 });
 
-test('pinned general-text C++ program still proxies to the code alias', async (t) => {
+test('explicit general-text model remains selected for a code-looking prompt', async (t) => {
   const { server } = await withServer(t, {}, {
     ready: ['qwenstral-code-speculator', 'general-text-speculator'],
     stubEnsure: true,
@@ -173,11 +173,11 @@ test('pinned general-text C++ program still proxies to the code alias', async (t
     headers: { 'content-type': 'application/json' },
     body: { model: 'general-text-speculator', messages: [{ role: 'user', content: 'generate a small limerick-like C++ program' }] },
   });
-  assert.equal(result.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
   assert.match(result.body.choices[0].message.content, /iostream|int main/);
 });
 
-test('session started on general-text switches to code on a python function', async (t) => {
+test('session keeps an explicitly requested general-text model', async (t) => {
   const sessions = new SessionLedger();
   const { server } = await withServer(t, {}, {
     sessions,
@@ -203,8 +203,8 @@ test('session started on general-text switches to code on a python function', as
     headers: { 'content-type': 'application/json', 'x-session-id': sid },
     body: { model: 'general-text-speculator', messages: [{ role: 'user', content: 'write a python function named noodles' }] },
   });
-  assert.equal(second.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
-  assert.match(second.body.choices[0].message.content, /def /);
+  assert.equal(second.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
+  assert.match(second.body.choices[0].message.content, /limerick/);
 });
 
 test('explicit translate prompt proxies to general-text-speculator', async (t) => {
@@ -740,7 +740,7 @@ test('/tts on chat completions is 400', async (t) => {
   assert.equal(result.status, 400);
 });
 
-test('plain follow-up after /code consults nexus instead of staying on code', async (t) => {
+test('explicit code model stays selected after a /code turn', async (t) => {
   const urls = [];
   const sessions = new SessionLedger();
   const { server } = await withServer(t, {}, {
@@ -779,8 +779,8 @@ test('plain follow-up after /code consults nexus instead of staying on code', as
     },
   });
   assert.equal(second.status, 200);
-  assert.equal(second.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
-  assert.equal(urls.some((url) => url.includes(':18187')), true);
+  assert.equal(second.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(urls.some((url) => url.includes(':18187')), false);
 });
 
 test('mixed image and audio on chat is not 400', async (t) => {
