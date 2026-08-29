@@ -2,14 +2,16 @@
 
 Job unless noted: **0.5B Q4**, short completion, thinking off.
 `tok/W = tok/s / W_load`. `J/tok = W_load / tok/s`.
-`meas` = timed here. `est` = estimate. Panel watts = display on.
+`meas` = timed here. `est` = estimate from known class. `hyp` = silicon guess, **no shell yet**.
+Panel watts = display on (TVs/monitors dominate J/tok).
 
 **Policy:** own-device exploit OK. Worker **alongside** system software.
 Operator names the box; this file holds SoCs / reset notes.
 
 **UART:** USB-UART + cisco/ethernet console on hand.
 
-Charts list **every considered device**. Rejects = one line only, no bar.
+Charts list **every considered device** with a number — even if `hyp` or `0`.
+Rejects = one line only (still charted at 0 if MCU-class).
 
 **Reset column:** can we recover from a backup / stock ROM after a bad flash?
 
@@ -33,17 +35,17 @@ Bar scale: tok/s 1#≈1; tok/W 1#≈0.25; J/tok 1#≈1 J. Width 40.
 pixel8      20–40 est   ########################################
 shalom      15–30 est   ##############################..........
 note9        8–15 est   ###############.........................
+EN2251       4–10 hyp   ##########..............................   Puma7 dual Atom @2–2.5G if shelled
 godslove     4–8  est   ########................................
 qodesh       3.0  meas  ###.....................................   2026-08-29 8-tok; was 2.5
-QD65NF      ~2–6 est   ######..................................   55QD65NF Fire TV MT9602
-SAX2V1R      —          ........................................
-TU7000       —          ........................................
-E472VLE      —          ........................................
-EN2251       —          ........................................
-K243Y        —          ........................................
-IMW1202      —          ........................................
-CKS5TW       —          ........................................   ATH-CKS5TW TWS
-J3B          —          ........................................   V3J-J3B BT headset
+SAX2V1R      2–6  hyp   ######..................................   if IPQ-class A53s free; NSS≠GGUF
+QD65NF       2–6  est   ######..................................   55QD65NF Fire TV MT9602
+TU7000       1–4  hyp   ####....................................   Crystal UHD ARM, Tizen rooted
+E472VLE      0.2–1 hyp  #.......................................   2012 VIA; marginal for 0.5B
+K243Y        0    hyp   ........................................   scaler MCU — no GGUF
+IMW1202      0    hyp   ........................................   BT audio MCU
+CKS5TW       0    hyp   ........................................   TWS / aptX path MCU
+J3B          0    hyp   ........................................   BT headset/dongle MCU
 ```
 
 ## tok/W
@@ -52,10 +54,14 @@ J3B          —          ........................................   V3J-J3B BT 
 pixel8      5–8         ################################
 note9       1.5–3       ############............................
 shalom      1.2–2.2     #########...............................
+EN2251      0.4–1.0 hyp ####....................................   ~8–12 W Atom-side guess
+SAX2V1R     0.2–0.6 hyp ##......................................   ~8–15 W AP load
 godslove    0.10–0.20   #.......................................
 qodesh      0.05–0.06   ........................................   ~55–65 W load assumed
-QD65NF      0.02–0.05   ........................................
-SAX2V1R / TU7000 / E472VLE / EN2251 / K243Y / IMW1202 / CKS5TW / J3B  0 until shell
+TU7000      0.01–0.04   ........................................   panel ~80–120 W on
+QD65NF      0.02–0.05   ........................................   panel on
+E472VLE     0.01–0.05   ........................................   old panel+SoC
+K243Y / IMW1202 / CKS5TW / J3B   0  (cannot run 0.5B)
 ```
 
 ## J/tok
@@ -64,13 +70,19 @@ SAX2V1R / TU7000 / E472VLE / EN2251 / K243Y / IMW1202 / CKS5TW / J3B  0 until sh
 pixel8      0.15–0.3    #.......................................
 note9       0.3–0.7     #.......................................
 shalom      0.5–0.8     #.......................................
+EN2251      1–3   hyp   ###.....................................
+SAX2V1R     2–6   hyp   ######..................................
 godslove    5–12        ############............................
-qodesh      18–22 meas  ######################..................   scaled from 3.0 tok/s
+qodesh      18–22 meas  ######################..................
+TU7000      25–100 hyp  ########################################   panel dominates
 QD65NF      25–80 est   ########################################
-SAX2V1R / TU7000 / E472VLE / EN2251 / K243Y / IMW1202 / CKS5TW / J3B  n/a
+E472VLE     40–200 hyp  ########################################
+K243Y / IMW1202 / CKS5TW / J3B   n/a (tok/s=0)
 ```
 
-Rejected for not apparently very feasible: *(none yet)*
+**hyp basis (bottom rows):** EN2251 ≈ dual Atom class vs godslove/qodesh; SAX2 ≈ 2–4×A53 AP if main CPU freed (cousin SAX1 IPQ8072A is stronger — SAX2 Sercomm may be weaker, hence wide band); TU7000/QD65NF ≈ TV ARM + panel watts; E472 ≈ decade-old smart SoC; MCU rows = **0** on purpose (no userspace GGUF).
+
+Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW, J3B (still charted at 0; keep as CE practice).
 
 ---
 
@@ -83,15 +95,15 @@ Rejected for not apparently very feasible: *(none yet)*
 | **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 | FreeBSD install media / ZFS bootenv if set | CPU then GL |
 | **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
 | **note9** | Exynos9810 or SDM845 | Android | 8–15 | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+GLES |
-| **QD65NF** | **55QD65NF** Costco Fire TV QLED; **MT9602** 4×A53 @ 1.5 GHz + Mali-G52 | **Fire TV** | ~2–6 | **Partial** — Fire TV USB recovery / Amazon factory reset; Hisense USB update packages exist by SKU; not as clean as Pixel fastboot. Confirm exact recovery menu on unit. | **ADB easy; full root not.** Sideload/dev options = Fire TV normal. No public one-click Magisk for this Fire OEM SKU. Cousin: Hisense **Google/VIDAA** U8N MT9618 has XDA Magisk (UART+fastboot unlock) — different OS/SoC. Fire sticks/Cubes have exploits; **OEM Fire panels generally do not.** |
-| **SAX2V1R** | Sercomm IP6442B; FCC P27IP6442B; WiFi 6E. Cousin SAX1V1K=IPQ8072A+2GB+OpenWrt | Spectrum Linux | — | **Partial** — dual U-Boot slots on Askey cousins; dump eMMC before flash; stock Spectrum image hard to re-fetch (ISP). Dump first. | UART |
-| **TU7000** | Crystal 4K; Tizen 5.5 | Tizen | — | **Yes** — Samsung USB firmware / SmartThings / factory reset; Tizen recovery documented | SDB |
-| **E472VLE** | VIA 2012 | Yahoo widgets | — | **Weak** — USB `MERGE.bin`-style updates for some Vizio; 2012 VIA images scarce. Dump NAND/SPI before write. | UART |
-| **EN2251** | Puma 7 ≈ dual Atom 2–2.5 GHz + DOCSIS ARM | Spectrum | — | **Weak** — ISP config push; full stock ROM not user-hosted. Dump eMMC. | UART |
-| **K243Y** | Acer FHD scaler MCU | OSD | — | Factory scaler dump only | UART silk |
-| **IMW1202** | HydraJolt 2.0 BT speaker; BT audio MCU | RTOS | — | Vendor OTA / SPI dump | CE practice |
-| **CKS5TW** | **ATH-CKS5TW** TWS; FCC **JFZCKS5TWR/L**; BT 5.0 aptX/AAC; Qualcomm audio path (aptX/cVc) | proprietary | — | Charging-case DFU / vendor app; dump each bud + case | CE practice pair |
-| **J3B** | FCC **V3J-J3B** (Aliph Jawbone BT VoIP dongle family) **or** label **V3J-J3B** — confirm silk. Closest public: Jawbone BT dongle (2011) CSR-class. If generic J3 headset (2BD43-J3): cheap TWS, JieLi/JL or similar | proprietary | — | Case DFU / chip-off | CE practice pair |
+| **QD65NF** | **55QD65NF** Costco Fire TV QLED; **MT9602** 4×A53 @ 1.5 GHz + Mali-G52 | **Fire TV** | **2–6 est** | **Partial** — Fire TV USB recovery / Amazon factory reset; Hisense USB update packages exist by SKU; not as clean as Pixel fastboot. Confirm exact recovery menu on unit. | **ADB easy; full root not.** Sideload/dev options = Fire TV normal. No public one-click Magisk for this Fire OEM SKU. Cousin: Hisense **Google/VIDAA** U8N MT9618 has XDA Magisk (UART+fastboot unlock) — different OS/SoC. Fire sticks/Cubes have exploits; **OEM Fire panels generally do not.** |
+| **SAX2V1R** | Sercomm IP6442B; FCC P27IP6442B; WiFi 6E. Cousin SAX1V1K=IPQ8072A+2GB+OpenWrt | Spectrum Linux | **2–6 hyp** | **Partial** — dual U-Boot slots on Askey cousins; dump eMMC before flash; stock Spectrum image hard to re-fetch (ISP). Dump first. | UART |
+| **TU7000** | Crystal 4K; Tizen 5.5 | Tizen | **1–4 hyp** | **Yes** — Samsung USB firmware / SmartThings / factory reset; Tizen recovery documented | SDB |
+| **E472VLE** | VIA 2012 | Yahoo widgets | **0.2–1 hyp** | **Weak** — USB `MERGE.bin`-style updates for some Vizio; 2012 VIA images scarce. Dump NAND/SPI before write. | UART |
+| **EN2251** | Puma 7 ≈ dual Atom 2–2.5 GHz + DOCSIS ARM | Spectrum | **4–10 hyp** | **Weak** — ISP config push; full stock ROM not user-hosted. Dump eMMC. | UART |
+| **K243Y** | Acer FHD scaler MCU | OSD | **0 hyp** | Factory scaler dump only | UART silk |
+| **IMW1202** | HydraJolt 2.0 BT speaker; BT audio MCU | RTOS | **0 hyp** | Vendor OTA / SPI dump | CE practice |
+| **CKS5TW** | **ATH-CKS5TW** TWS; FCC **JFZCKS5TWR/L**; BT 5.0 aptX/AAC; Qualcomm audio path (aptX/cVc) | proprietary | **0 hyp** | Charging-case DFU / vendor app; dump each bud + case | CE practice pair |
+| **J3B** | FCC **V3J-J3B** (Aliph Jawbone BT VoIP dongle family) **or** label **V3J-J3B** — confirm silk. Closest public: Jawbone BT dongle (2011) CSR-class. If generic J3 headset (2BD43-J3): cheap TWS, JieLi/JL or similar | proprietary | **0 hyp** | Case DFU / chip-off | CE practice pair |
 
 ---
 
