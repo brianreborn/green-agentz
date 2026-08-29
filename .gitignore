@@ -1,0 +1,13 @@
+*.log
+*.err
+*.gguf
+*.bin
+*.zip
+*.tar
+_tmp/
+.cache/
+node_modules/
+runtime/
+models/
+device-dumps/
+
