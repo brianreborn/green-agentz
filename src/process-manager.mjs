@@ -107,16 +107,28 @@ export class ProcessManager {
     this.selectedProfiles = selectedProfiles;
     this.processes = new Map();
     this.starting = new Map();
+    this.idleSweeper = null;
+    const g = manifest?.gateway ?? {};
+    this.idleEvictMs = g.idle_evict_ms ?? 300_000;
+    this.maxWarmSpecialists = g.max_warm_specialists ?? 3;
   }
 
   get(alias) {
     return this.processes.get(alias);
   }
 
+  touch(alias) {
+    const record = this.processes.get(alias);
+    if (record) record.lastUsedAt = Date.now();
+  }
+
   async ensure(agent, { signal } = {}) {
     if (agent.runtime === 'logical') return { logical: true, agent };
     const current = this.processes.get(agent.alias);
-    if (current?.state === 'ready' && current.child.exitCode === null) return current;
+    if (current?.state === 'ready' && current.child.exitCode === null) {
+      current.lastUsedAt = Date.now();
+      return current;
+    }
     // Resident CPU nexus (tool-router-agent) stays loaded for the life of serve.
     // Starting a specialist must never stop or unload it — two llama-server
     // processes at once is required (nexus :8187 CPU + specialist vulkan).
@@ -302,6 +314,36 @@ export class ProcessManager {
   }
 
   async stopAll() {
+    this.stopIdleSweeper();
     await Promise.all([...this.processes.keys()].map((alias) => this.stop(alias)));
+  }
+
+  /**
+   * Stop non-resident specialist backends that have been idle past idleEvictMs,
+   * always keeping the maxWarmSpecialists most-recently-used. The resident nexus
+   * and anything currently starting are never touched. Keeps a 16 GB box from
+   * drowning in mmap'd model files.
+   */
+  async sweepIdle(now = Date.now()) {
+    const evictable = [...this.processes.values()].filter((r) =>
+      r.owned && !r.resident && r.state === 'ready' && r.child.exitCode === null && !this.starting.has(r.alias));
+    evictable.sort((a, b) => (b.lastUsedAt ?? b.createdAt ?? 0) - (a.lastUsedAt ?? a.createdAt ?? 0));
+    const overCap = new Set(evictable.slice(Math.max(0, this.maxWarmSpecialists)).map((r) => r.alias));
+    const doomed = evictable.filter((r) => {
+      const idleFor = now - (r.lastUsedAt ?? r.createdAt ?? now);
+      return overCap.has(r.alias) || (this.idleEvictMs > 0 && idleFor > this.idleEvictMs);
+    });
+    await Promise.all(doomed.map((r) => this.stop(r.alias)));
+    return doomed.map((r) => r.alias);
+  }
+
+  startIdleSweeper(intervalMs = 30_000) {
+    if (this.idleSweeper || this.idleEvictMs <= 0) return;
+    this.idleSweeper = setInterval(() => { this.sweepIdle().catch(() => {}); }, intervalMs);
+    this.idleSweeper.unref?.();
+  }
+
+  stopIdleSweeper() {
+    if (this.idleSweeper) { clearInterval(this.idleSweeper); this.idleSweeper = null; }
   }
 }

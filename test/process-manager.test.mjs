@@ -226,3 +226,42 @@ test('ensure specialist does not stop the resident nexus', async () => {
   assert.equal(launch.args[launch.args.indexOf('--port') + 1], '18187');
   await manager.stopAll();
 });
+
+test('sweepIdle evicts over-cap and stale specialists, keeps the resident nexus', async () => {
+  const manifest = sampleManifest();
+  const registry = new AgentRegistry(manifest);
+  const children = [];
+  const manager = new ProcessManager({
+    manifest,
+    registry,
+    hostAdapter: { applyPriority() {} },
+    spawnImpl: () => { const c = new FakeChild(); children.push(c); return c; },
+    fetchImpl: async () => ({ ok: true }),
+  });
+  manager.maxWarmSpecialists = 1;
+  manager.idleEvictMs = 10_000;
+  const now = Date.now();
+  const put = (alias, resident, lastUsedAt) => manager.processes.set(alias, {
+    alias, resident, owned: true, state: 'ready', createdAt: now, lastUsedAt,
+    child: new FakeChild(),
+  });
+  put('tool-router-agent', true, now);                 // resident - never evicted
+  put('general-text-speculator', false, now - 1_000);  // fresh, within warm cap
+  put('qwenstral-code-speculator', false, now - 2_000); // over cap (cap = 1)
+  put('vision-layout-agent', false, now - 60_000);      // stale + over cap
+
+  const evicted = await manager.sweepIdle(now);
+  assert.ok(evicted.includes('qwenstral-code-speculator'));
+  assert.ok(evicted.includes('vision-layout-agent'));
+  assert.ok(!evicted.includes('tool-router-agent'), 'resident nexus survives');
+  assert.ok(!evicted.includes('general-text-speculator'), 'most-recent specialist stays warm');
+  assert.ok(manager.processes.has('tool-router-agent'));
+  assert.ok(!manager.processes.has('vision-layout-agent'));
+});
+
+test('startIdleSweeper is a no-op when idle eviction is disabled', () => {
+  const manager = new ProcessManager({ manifest: sampleManifest(), registry: new AgentRegistry(sampleManifest()) });
+  manager.idleEvictMs = 0;
+  manager.startIdleSweeper();
+  assert.equal(manager.idleSweeper, null);
+});
