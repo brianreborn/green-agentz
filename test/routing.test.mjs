@@ -6,7 +6,13 @@ import {
   isExplicitTranslationRequest,
   latestUserMessageText,
   hardRuleRoute,
+  parseSlashCommand,
+  stripSlashCommand,
+  aliasCanAdmit,
+  availableAliases,
+  detectModalities,
 } from '../src/routing.mjs';
+import { nexusCandidateAliases } from '../src/nexus.mjs';
 import { ValidationError } from '../src/errors.mjs';
 import { sampleManifest } from './helpers.mjs';
 
@@ -99,4 +105,72 @@ test('lock_alias can pin the resident nexus', () => {
   }, reg);
   assert.equal(routed.effectiveAlias, 'tool-router-agent');
   assert.equal(routed.reason, 'lock_alias');
+});
+
+test('plain text does not hard-route to vision-layout-agent', () => {
+  const body = { messages: [{ role: 'user', content: 'hello there, how are you' }] };
+  const routed = hardRuleRoute(body, registry());
+  assert.equal(routed.effectiveAlias, null);
+  assert.equal(routed.reason, 'nexus');
+  assert.equal(detectModalities(body).image, false);
+  assert.notEqual(routed.effectiveAlias, 'vision-layout-agent');
+});
+
+test('/code slash pins qwenstral-code-speculator even when the model is general-text', () => {
+  const routed = hardRuleRoute({
+    model: 'general-text-speculator',
+    messages: [{ role: 'user', content: '/code write hello' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.reason, 'slash_code');
+  const parsed = parseSlashCommand({ messages: [{ role: 'user', content: '/code write hello' }] });
+  assert.equal(parsed.token, 'code');
+  assert.equal(parsed.alias, 'qwenstral-code-speculator');
+  const stripped = stripSlashCommand({ messages: [{ role: 'user', content: '/code write hello' }] });
+  assert.equal(stripped.messages[0].content, 'write hello');
+});
+
+test('/text slash pins general-text-speculator even on a python prompt', () => {
+  const routed = hardRuleRoute({
+    model: 'qwenstral-code-speculator',
+    messages: [{ role: 'user', content: '/text write a python function named hello' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, 'general-text-speculator');
+  assert.equal(routed.reason, 'slash_text');
+});
+
+test('slash inside a fence is not an operator switch', () => {
+  const routed = hardRuleRoute({
+    messages: [{ role: 'user', content: '```\n/code sneak\n```\njust a poem' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, null);
+  assert.equal(routed.reason, 'nexus');
+  assert.equal(parseSlashCommand({ messages: [{ role: 'user', content: '```\n/code sneak\n```' }] }), null);
+});
+
+test('impractical aliases are skipped by availableAliases and aliasCanAdmit', () => {
+  const reg = registry();
+  reg.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  assert.equal(aliasCanAdmit(reg, 'qwenstral-code-speculator'), false);
+  assert.equal(availableAliases(reg).includes('qwenstral-code-speculator'), false);
+});
+
+test('nexus candidates omit vision and audio on plain text', () => {
+  const reg = registry();
+  for (const alias of reg.agents.keys()) reg.setStatus(alias, 'ready');
+  const names = nexusCandidateAliases(reg, new Set(), { messages: [{ role: 'user', content: 'hello' }] });
+  assert.equal(names.includes('vision-layout-agent'), false);
+  assert.equal(names.includes('audio-transcription-agent'), false);
+  assert.equal(names.includes('security-monitor-agent'), false);
+});
+
+test('stripSlashCommand replaces array text parts', () => {
+  const stripped = stripSlashCommand({
+    messages: [
+      { role: 'assistant', content: 'prior' },
+      { role: 'user', content: [{ type: 'text', text: '/text hello' }, { type: 'text', text: 'keep' }] },
+    ],
+  });
+  assert.equal(stripped.messages[1].content[0].text, 'hello');
+  assert.equal(stripped.messages[1].content[1].text, 'keep');
 });

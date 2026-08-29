@@ -304,7 +304,9 @@ export class MonitorIpc {
   }
 
   recent(limit = this.recentLimit) {
-    const n = Math.max(0, Math.min(this.recentBuf.length, Number(limit) || this.recentLimit));
+    const requested = Number(limit);
+    const n = Math.max(0, Math.min(this.recentBuf.length, Number.isFinite(requested) ? requested : this.recentLimit));
+    if (n === 0) return [];
     return this.recentBuf.slice(-n).map((event) => cloneEnvelope(event));
   }
 

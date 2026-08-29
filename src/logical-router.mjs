@@ -16,7 +16,7 @@ function collectText(body) {
 
 // C++ cannot use a trailing \b: '+' is non-word, so "C++ program" would miss \bc\+\+\b.
 const CODE_INTENT = /```|\btypescript\b|\bpython\b|\bfunction\b|\bjson schema\b|\bc\+\+|\bcpp\b|\bprogram\b|\bcode\b/i;
-const IMAGE_GENERATION_INTENT = /\b(text[- ]to[- ]image|generate (an? )?(image|picture|illustration|drawing)|draw (me )?(an? )?(image|picture))\b|\b(render|illuminat(?:e|ed|ion)|calligraphy|illustration)\b/i;
+const IMAGE_GENERATION_INTENT = /\b(?:text[- ]to[- ]image|generate (?:an? )?(?:image|picture|illustration|drawing)|draw(?: me)?(?: an?)? (?:image|picture)|draw(?: me)? (?:a|an|the|this|that)\b|imagine (?:an? )?(?:image|picture)|imagine (?:a|an|the)\b)|\b(?:render|illuminat(?:e|ed|ion)|calligraphy|illustration)\b/i;
 
 function plan(route, confidence, reason_code, required_modalities) {
   return { route, confidence, reason_code, required_modalities, allowed_tool_arguments: {} };

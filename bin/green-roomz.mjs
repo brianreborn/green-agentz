@@ -5,8 +5,10 @@ import { ProcessManager } from '../src/process-manager.mjs';
 import { PolicyGate } from '../src/scheduler.mjs';
 import { SessionLedger } from '../src/sessions.mjs';
 import { WindowsHostAdapter } from '../src/hosts/windows.mjs';
+import { AndroidSidecarAdapter } from '../src/hosts/android.mjs';
 import { applyStoreWinners, BenchmarkRunner, qualifyMissingAgents } from '../src/benchmark.mjs';
 import { Gateway } from '../src/gateway.mjs';
+import { attachServeConsole } from '../src/serve-console.mjs';
 import { POLICIES, REQUIRED_ALIASES } from '../src/constants.mjs';
 
 function argValue(args, flag, fallback) {
@@ -38,8 +40,9 @@ async function bootstrap(args) {
   const manifestPath = argValue(args, '--manifest');
   const manifest = await loadManifest(manifestPath);
   const runtime = manifest.runtimes?.llama_server?.command;
-  const hostAdapter = process.platform === 'win32'
-    ? new WindowsHostAdapter({ runtimeCommand: runtime })
+  const sidecar = process.env.GREEN_ROOMZ_ANDROID_SIDECAR;
+  const hostAdapter = sidecar
+    ? new AndroidSidecarAdapter({ endpoint: sidecar, token: process.env.GREEN_ROOMZ_ANDROID_TOKEN })
     : new WindowsHostAdapter({ runtimeCommand: runtime });
   const registry = await new AgentRegistry(manifest).inspect({ hostAdapter });
   const processes = new ProcessManager({ manifest, registry, hostAdapter });
@@ -108,6 +111,7 @@ async function cmdBenchmark(ctx, args) {
 }
 
 async function cmdServe(ctx, args) {
+  attachServeConsole({ root: process.cwd() });
   const objective = POLICIES[ctx.manifest.gateway.policy]?.objective ?? 'throughput';
   try {
     await applyStoreWinners(ctx.processes, { objective });

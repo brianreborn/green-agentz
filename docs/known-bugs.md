@@ -4,12 +4,11 @@ Live on shalom `green-roomz serve` unless noted. Avoid with slash commands until
 
 ## Routing / nexus (open)
 
-- **Vision-first hop.** Qwenstral 0.5B still emits `vision-layout-agent` on plain text. Gateway rejects (`vision without image part`) then falls through. `/route` aliases can be right while `x-green-roomz-route-reason` looks like `default_text|after:vision without image part`.
-  - Avoid: `/text`, `/code`, `/image`, or `/auto` every turn. Do not trust unaided “draw/generate an image”.
-  - Fix (not landed): omit vision/audio from nexus AVAILABLE + `json_schema` enum unless `detectModalities` has that part; map text-only draw/imagine/generate-an-image to `image-generation-agent` in `offlinePlan`; return only the final reason.
+- **Vision-first hop (mitigated).** Nexus AVAILABLE + `json_schema` omit `vision-layout-agent` / `audio-transcription-agent` unless that part is present. A live 0.5B that still emits vision is rejected and the **final** reason is returned (no `after:vision without image part`).
+  - Avoid: `/vision` without a real image part.
 
-- **Text-only image intent goes to general-text.** “A red apple” / “draw a red apple” without `/image` does not reach `image-generation-agent`.
-  - Avoid: `/image`, `/imagine`, or `/draw`.
+- **Text-only image intent.** `draw a red apple` / `imagine a sunset` / `generate an image` now map to `image-generation-agent` via `offlinePlan`. A bare noun like “a red apple” still goes to general-text.
+  - On qodesh, `image-generation-agent` is unavailable (`sd-server.exe` missing) so chat falls through to an admittable specialist or the resident 0.5B.
 
 - **llama.app last-alias pin.** Client keeps sending `model=general-text-speculator`. `/auto` now unlocks pin and session (tested). A plain follow-up with no `/auto` after `/code` is not fully proven on the chat path.
   - Avoid: `/auto` or an explicit slash each turn. `lock_alias: true` only when you mean lock.
@@ -25,7 +24,7 @@ Live on shalom `green-roomz serve` unless noted. Avoid with slash commands until
 - **Mixed image + audio** still `ValidationError`.
   - Avoid: one modality per turn, or an explicit qualified workflow.
 
-- **qodesh tree lag.** qodesh was unpacked from an older `green-roomz.tar` and may lack slash `/auto` / sanitizer patches until `src/*.mjs` is copied from shalom or `/workspace/grz-src`.
+- **qodesh specialists.** 7B code is `impractical` on 16GB. `/code` no longer 503s: the gateway skips the missing specialist and answers on an admittable alias or the resident 0.5B nexus. Whisper/Piper/sd-server binaries are still missing.
 
 ## Escape / embed (partially patched on shalom)
 
@@ -33,9 +32,9 @@ Landed on shalom both trees: C0/C1/ESC/CRLF stripped from route reason/headers/h
 
 Still open:
 
-- Stream path can forward **raw SSE bytes** (ANSI / OSC 52 / CSI) to llama.app.
+- Stream path can forward **raw SSE bytes** (ANSI / OSC 52 / CSI) to llama.app after the HANDOFF peek.
 - Client headers are still forwarded to llama-server except a small denylist.
-- `sanitizeCompletionJson` only strips reasoning fields, not C0/C1/ESC in content.
+- JSON completions now strip C0/C1/ESC from `message.content` / `delta.content`.
 - Do not dump raw nexus/model text onto the qodesh `thinking.log` console without stripping ESC.
 
 ## Serve / ops

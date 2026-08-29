@@ -186,7 +186,17 @@ export class Gateway {
       }
       if (request.method !== 'POST') return jsonResponse(response, 405, { error: { message: 'Method not allowed' } }, { allow: 'POST', ...cors });
       const raw = await readBody(request, this.manifest.gateway.request_body_limit_bytes ?? 16 * 1024 * 1024);
-      const body = raw.length ? JSON.parse(raw.toString('utf8')) : {};
+      let body = {};
+      if (raw.length) {
+        try {
+          body = JSON.parse(raw.toString('utf8'));
+        } catch {
+          throw new ValidationError('Request body is not valid JSON');
+        }
+      }
+      if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+        throw new ValidationError('Request body must be a JSON object');
+      }
       if (url.pathname === '/v1/embeddings') body.model = body.model ?? 'semantic-embedding-agent';
       if (url.pathname === '/v1/rerank') body.model = body.model ?? 'retrieval-rerank-agent';
       return await this.handleInference(request, response, body, identity, cors, url.pathname);
@@ -387,7 +397,8 @@ export class Gateway {
         }
       } catch {}
     }
-    const alias = isRoutableAlias(this.registry, plan.route) ? plan.route : (isRoutableAlias(this.registry, FALLBACK_ALIAS) ? FALLBACK_ALIAS : NEXUS_ALIAS);
+    const alias = plan.route
+      ?? (isRoutableAlias(this.registry, FALLBACK_ALIAS) ? FALLBACK_ALIAS : NEXUS_ALIAS);
     plan = { ...plan, route: alias };
     const routed = {
       requestedAlias: body.model ?? null,
@@ -476,8 +487,11 @@ export class Gateway {
             return this.handleMonitorSnapshot(request, response, body, identity, session, cors);
           }
           if (!isRoutableAlias(this.registry, alias) || !aliasCanAdmit(this.registry, alias, this.processes)) {
+            visited.add(alias);
+            hops.push(alias);
+            notes.push(stripControls(`${alias} unavailable (impractical or missing)`));
             this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: hard.reason } });
-            throw new UnavailableError(`${alias} is unavailable`, this.registry.status(alias).missing);
+            continue;
           }
         } else {
           const picked = await consultNexus({
@@ -499,6 +513,17 @@ export class Gateway {
           hops.push(alias);
           notes.push(stripControls(`${alias} unavailable (impractical or missing)`));
           this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'unavailable', hops: hops.slice() } });
+          continue;
+        }
+
+        // Nexus-picked cold specialists: do not mmap a 4B/7B and wedge --parallel 1.
+        // Slash/lock (first hop with a hard alias) may still cold-start.
+        const alreadyReady = this.registry.status(alias).state === 'ready';
+        if (hops.length > 0 && !alreadyReady && alias !== NEXUS_ALIAS) {
+          visited.add(alias);
+          hops.push(alias);
+          notes.push(stripControls(`${alias} cold; using resident`));
+          this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'cold_skipped', hops: hops.slice() } });
           continue;
         }
 

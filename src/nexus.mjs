@@ -16,20 +16,15 @@ export function stripFence(text) {
   return String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
 }
 
-export function parseRouteJson(text) {
-  const stripped = stripFence(text);
+/** First `{...}` object only; trailing junk and later objects are ignored. */
+export function extractJsonObject(text) {
+  const stripped = String(text ?? '').trim();
   if (!stripped) return null;
-  const pick = (value) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    return {
-      route: typeof value.route === 'string' ? value.route.trim() : null,
-      confidence: Number(value.confidence),
-      reason: String(value.reason ?? value.reason_code ?? ''),
-    };
-  };
   const tryParse = (raw) => {
     try {
-      return pick(JSON.parse(raw));
+      const value = JSON.parse(raw);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+      return value;
     } catch {
       return null;
     }
@@ -57,6 +52,16 @@ export function parseRouteJson(text) {
     }
   }
   return null;
+}
+
+export function parseRouteJson(text) {
+  const value = extractJsonObject(stripFence(text));
+  if (!value) return null;
+  return {
+    route: typeof value.route === 'string' ? value.route.trim() : null,
+    confidence: Number(value.confidence),
+    reason: String(value.reason ?? value.reason_code ?? ''),
+  };
 }
 
 const ALIAS_HINTS = {
@@ -232,12 +237,12 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
   const offline = offlinePlan(stripped, registry, visited);
   if (bad) {
     if (!routeIsBad(offline, registry, visited, stripped) && admitOk(offline.route)) {
-      return { ...offline, reason: `${offline.reason}|after:${bad}` };
+      return { ...offline, reason: String(offline.reason ?? 'offline_plan') };
     }
     if (isRoutableAlias(registry, FALLBACK_ALIAS) && !visited.has(FALLBACK_ALIAS) && admitOk(FALLBACK_ALIAS)) {
-      return { route: FALLBACK_ALIAS, confidence: 0.4, reason: 'fallback_text', constraint: bad };
+      return { route: FALLBACK_ALIAS, confidence: 0.4, reason: 'fallback_text' };
     }
-    return { route: null, confidence: 0, reason: 'no_route', constraint: bad };
+    return { route: null, confidence: 0, reason: 'no_route' };
   }
   const liveReason = String(plan.reason ?? plan.reason_code ?? '');
   const nexusDefaulted = plan.route === FALLBACK_ALIAS
@@ -246,7 +251,7 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
     && (offline.confidence ?? 0) >= 0.7;
   const junkReason = liveReason === 'short' || liveReason === 'hello' || liveReason === 'short-token';
   if ((nexusDefaulted || (junkReason && offline.route && offline.route !== plan.route && (offline.confidence ?? 0) >= 0.7)) && admitOk(offline.route)) {
-    return { ...offline, reason: `nexus_overruled:${plan.route}|${offline.reason}` };
+    return { ...offline, reason: String(offline.reason ?? 'offline_plan') };
   }
   return {
     route: plan.route,

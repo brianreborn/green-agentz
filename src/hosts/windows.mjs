@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 export class WindowsHostAdapter {
   constructor({ runtimeCommand } = {}) {
     this.runtimeCommand = runtimeCommand;
-    this.kind = 'windows';
+    this.kind = process.platform === 'win32' ? 'windows' : process.platform;
   }
 
   async fingerprint() {

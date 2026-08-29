@@ -108,3 +108,25 @@ test('keeps reasoning_content when enable_thinking is true', async () => {
   const parsed = JSON.parse(Buffer.concat(response.chunks).toString());
   assert.equal(parsed.choices[0].message.reasoning_content, 'thoughts');
 });
+
+test('strips ESC and C0 controls from completion content', async () => {
+  const response = new FakeResponse();
+  await proxyJson({
+    request: { method: 'POST', headers: {} },
+    response,
+    body: { model: 'general-text-speculator', messages: [] },
+    target: 'http://127.0.0.1:9/v1/chat/completions',
+    config: { retry_initial_ms: 5, retry_max_ms: 10, retry_deadline_ms: 50 },
+    fetchImpl: async () => ({
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      async text() {
+        return JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: '\u001b[31mred\u001b[0m\u0007bell' } }],
+        });
+      },
+    }),
+  });
+  const parsed = JSON.parse(Buffer.concat(response.chunks).toString());
+  assert.equal(parsed.choices[0].message.content, 'redbell');
+});

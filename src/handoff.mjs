@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { HANDOFF_PEEK_CHARS } from './constants.mjs';
 import { sanitizeCompletionJson } from './proxy.mjs';
-import { stripFence } from './nexus.mjs';
+import { extractJsonObject, stripFence } from './nexus.mjs';
 
 const SUGGEST_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -24,23 +24,17 @@ export function parseHandoffContent(text) {
     const rest = trimmed.replace(/^HANDOFF\s*/i, '').trim();
     let reason = rest || 'not my job';
     let suggest = null;
-    if (rest) {
-      try {
-        const obj = JSON.parse(stripFence(rest));
-        if (obj && typeof obj === 'object') {
-          reason = obj.reason ?? reason;
-          suggest = obj.suggest ?? null;
-        }
-      } catch {}
+    const obj = rest ? extractJsonObject(stripFence(rest)) : null;
+    if (obj) {
+      reason = obj.reason ?? reason;
+      suggest = obj.suggest ?? null;
     }
     return { handoff: true, reason: safeReason(reason, 'not my job'), suggest: safeSuggest(suggest) };
   }
-  try {
-    const obj = JSON.parse(stripFence(trimmed));
-    if (obj && typeof obj === 'object' && obj.handoff === true) {
-      return { handoff: true, reason: safeReason(obj.reason, 'handoff'), suggest: safeSuggest(obj.suggest) };
-    }
-  } catch {}
+  const obj = extractJsonObject(stripFence(trimmed));
+  if (obj && obj.handoff === true) {
+    return { handoff: true, reason: safeReason(obj.reason, 'handoff'), suggest: safeSuggest(obj.suggest) };
+  }
   return null;
 }
 

@@ -155,7 +155,14 @@ export class ProcessManager {
     } else {
       throw new UnavailableError(`Runtime ${runtime.kind} has no server adapter yet`);
     }
-    return { command: runtime.command, args, env: { ...process.env, ...(runtime.env ?? {}) }, runtime };
+    const env = { ...process.env, ...(runtime.env ?? {}) };
+    for (let i = 0; i < args.length - 1; i += 1) {
+      if (args[i] === '--device' && args[i + 1] === 'none') {
+        env.GGML_VULKAN = '0';
+        break;
+      }
+    }
+    return { command: runtime.command, args, env, runtime };
   }
 
   profilesFor(agent) {

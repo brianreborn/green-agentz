@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { jitteredBackoff, sleep } from './util.mjs';
+import { jitteredBackoff, sleep, stripEscapes } from './util.mjs';
 
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
@@ -24,21 +24,26 @@ export function sanitizeCompletionJson(payload, { keepReasoning = false } = {}) 
   if (!payload || typeof payload !== 'object') return payload;
   const next = { ...payload };
   delete next.timings;
-  if (keepReasoning) return next;
   if (Array.isArray(next.choices)) {
     next.choices = next.choices.map((choice) => {
       if (!choice || typeof choice !== 'object') return choice;
       const copy = { ...choice };
       if (copy.message && typeof copy.message === 'object') {
         const message = { ...copy.message };
-        delete message.reasoning;
-        delete message.reasoning_content;
+        if (!keepReasoning) {
+          delete message.reasoning;
+          delete message.reasoning_content;
+        }
+        if (typeof message.content === 'string') message.content = stripEscapes(message.content);
         copy.message = message;
       }
       if (copy.delta && typeof copy.delta === 'object') {
         const delta = { ...copy.delta };
-        delete delta.reasoning;
-        delete delta.reasoning_content;
+        if (!keepReasoning) {
+          delete delta.reasoning;
+          delete delta.reasoning_content;
+        }
+        if (typeof delta.content === 'string') delta.content = stripEscapes(delta.content);
         copy.delta = delta;
       }
       return copy;

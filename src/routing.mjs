@@ -119,8 +119,25 @@ const SLASH_ALIASES = Object.freeze({
   auto: 'auto',
 });
 
+function latestUserCommandText(body) {
+  const messages = body?.messages ?? [];
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== 'user') continue;
+    const content = messages[index].content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        if (typeof part === 'string' && part.trim()) return part;
+        if (part && typeof part.text === 'string' && part.text.trim()) return part.text;
+      }
+    }
+    return '';
+  }
+  return '';
+}
+
 export function parseSlashCommand(body) {
-  const text = latestUserMessageText(body).trim();
+  const text = latestUserCommandText(body).trim();
   if (!text) return null;
   const unfenced = text.replace(/```[\s\S]*?```/g, '').trim();
   const match = /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(unfenced);

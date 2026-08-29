@@ -24,3 +24,21 @@ test('render/calligraphy is image generation intent', () => {
   assert.equal(plan.route, 'image-generation-agent');
   assert.equal(plan.reason_code, 'image_generation_intent');
 });
+
+test('draw a red apple is image generation intent', () => {
+  const plan = planRoute({ messages: [{ role: 'user', content: 'draw a red apple' }] });
+  assert.equal(plan.route, 'image-generation-agent');
+  assert.equal(plan.reason_code, 'image_generation_intent');
+});
+
+test('imagine a sunset is image generation intent', () => {
+  const plan = planRoute({ messages: [{ role: 'user', content: 'imagine a sunset over the ocean' }] });
+  assert.equal(plan.route, 'image-generation-agent');
+  assert.equal(plan.reason_code, 'image_generation_intent');
+});
+
+test('plain chat is not image generation intent', () => {
+  const plan = planRoute({ messages: [{ role: 'user', content: 'I imagine that the weather is wrong' }] });
+  assert.equal(plan.route, 'general-text-speculator');
+  assert.equal(plan.reason_code, 'default_text');
+});

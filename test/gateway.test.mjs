@@ -467,3 +467,116 @@ test('observeHop posts mailbox and ipc; logger emit throw is swallowed', () => {
   assert.equal(ipcEvent.kind, 'success');
   assert.equal(ipcEvent.ticket, 's1');
 });
+
+test('/code slash pins the code specialist and skips nexus', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'int main() { return 0; }' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      model: 'general-text-speculator',
+      messages: [{ role: 'user', content: '/code write hello' }],
+    },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'slash_code');
+  assert.equal(urls.some((url) => url.includes(':18187')), false);
+  assert.equal(urls.some((url) => url.includes(':18183')), true);
+});
+
+test('/text slash pins general-text even on a python-looking prompt', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'a short poem' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      model: 'qwenstral-code-speculator',
+      messages: [{ role: 'user', content: '/text write a python function named hello' }],
+    },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'slash_text');
+  assert.equal(urls.some((url) => url.includes(':18187')), false);
+  assert.equal(urls.some((url) => url.includes(':18184')), true);
+});
+
+test('plain text does not hop to vision even if nexus emits vision-layout-agent', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['tool-router-agent', 'vision-layout-agent', 'general-text-speculator'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      if (String(url).includes(':18187')) {
+        return jsonFetch({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'vision-layout-agent', confidence: 0.9, reason: 'looks visual' }) } }],
+        });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'plain-ok' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: 'hello there' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.notEqual(result.headers['x-green-roomz-effective-alias'], 'vision-layout-agent');
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
+  assert.doesNotMatch(result.headers['x-green-roomz-route-reason'] ?? '', /after:/);
+  assert.equal(urls.some((url) => url.includes(':18181')), false);
+  assert.notEqual(result.status, 503);
+});
+
+test('/code on an impractical specialist falls back to resident 0.5B instead of 503', async (t) => {
+  const urls = [];
+  const { server, registry, processes } = await withServer(t, {}, {
+    ready: ['tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      assert.equal(String(url).includes(':18183'), false, 'must not hop to impractical code specialist');
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
+    },
+  });
+  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  const ensured = [];
+  const original = processes.ensure;
+  processes.ensure = async (agent) => {
+    ensured.push(agent.alias);
+    return original(agent);
+  };
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/code write hello' }] },
+  });
+  assert.notEqual(result.status, 503);
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.body.choices[0].message.content, 'resident-ok');
+  assert.equal(ensured.includes('qwenstral-code-speculator'), false);
+  assert.equal(urls.every((url) => url.includes('18187')), true);
+});
