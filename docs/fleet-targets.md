@@ -314,27 +314,28 @@ SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 ### Ship commitment - what the 8600 will do
 
-Shipping without a useful GPU role fails. The card is **not** required to hold a whole chat model. It **is** required to be on the inference critical path via CUDA 6.5 / sm_1.1.
+Shipping without a useful GPU role fails. **Both** bars below are required to ship (operator call 2026-08-29). If we cannot land **security-monitor / mailbox cores** on sm_1.1, that is an engineering failure — those are tiny, bounded kernels on a card we already own.
 
-**1. Primary (must ship): CUDA 6.5 / sm_1.1 GGML path for the existing 0.5B Q4**
+**A. Floor (must not fail): security-monitor / mailbox CUDA cores on sm_1.1**
 
 | Piece | Spec |
 |---|---|
-| Binary | Our build of `llama-server` (ggml-cuda) with **compute_11 / CUDA 6.5**, not stock Vulkan b10665 |
-| Model | **Same** `Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` — existing small, no new family |
-| Placement | Weights mostly **DDR3 mmap**; GPU gets **as many layers/ops as fit in ~180 MB** after context (`n-gpu-layers` tuned, not `all`) |
-| Runtime | Qodesh profile e.g. `cuda11-partial` beside `cpu-2`; Vulkan profiles stay off this host |
-| Useful = | During a short completion the GPU is **busy** and prompt or gen tok/s is **>= CPU-only** on the same prompt (no regression) |
+| Binary | Our CUDA **6.5 / compute_11** build (same toolchain as LLM path) |
+| Work | Copy-engine or host-memcpy slot per audit **F3/F21**; seq as `{hi,lo}` on sm_1.1; payload hash / ring scrub / non-blocking push assist — **GPU MUST NOT list** (audit): private slot, not a model list |
+| Useful = | Hot path uses the 8600 for at least one monitor/mailbox op under load; CPU fallback remains correct if GPU absent |
 
-**2. Secondary (if layer offload slips): fixed sm_1.1 kernels in GRZ**
+**B. Also required to ship: partial 0.5B Q4 offload**
 
-Same toolchain. GPU runs a small always-on job already on the path (e.g. mailbox payload hash / one ubatch Q4 dequant streamed from host). Counts as useful work; does **not** replace (1).
+| Piece | Spec |
+|---|---|
+| Binary | Same sm_1.1 `llama-server` / ggml-cuda (not stock Vulkan b10665) |
+| Model | Existing `Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` only |
+| Placement | DDR3 mmap + `n-gpu-layers` fitted to ~180 MB VRAM |
+| Useful = | GPU busy during completion; tok/s **>= CPU-only** on the same short prompt |
 
-**3. Non-goals on 224 MB**
+**Non-goals on 224 MB:** whole 0.5B/4B/7B in VRAM; Vulkan device list; vision/whisper/sd on this GPU.
 
-Full 0.5B/4B/7B in VRAM; stock Vulkan lighting up; image-gen/whisper/big vision on this GPU.
-
-**Order:** CPU nexus stays live -> CUDA 6.5 toolchain (VS2013 + staged installer, careful driver) -> build sm_1.1 ggml -> tune `n-gpu-layers` until (1) passes -> then qodesh GPU is shippable.
+**Order:** CPU nexus stays live -> CUDA 6.5 + VS2013 toolchain (careful driver) -> **(A) monitor/mailbox cores first** (proves the card) -> **(B) tune n-gpu-layers** -> both green before "qodesh GPU shipped."
 
 ## Block layouts (all considered)
 
