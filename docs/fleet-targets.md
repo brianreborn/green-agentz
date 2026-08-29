@@ -5,13 +5,16 @@ Job unless noted: **0.5B Q4**, short completion, thinking off.
 `meas` = timed here. `est` = estimate from known class. `hyp` = silicon guess, **no shell yet**.
 Panel watts = display on (TVs/monitors dominate J/tok).
 
+**Chart rule:** if we know enough SoC/RAM to guess 0.5B Q4 → put a **`hyp`** (or `est`) bar.
+**`0` / blank only** when we **cannot really guess** (no usable CPU story, or MCU with no GGUF path).
+Not “0 until shell” for every unshelled box — shell upgrades `hyp`→`meas`.
+
 **Policy:** own-device exploit OK. Worker **alongside** system software.
 Operator names the box; this file holds SoCs / reset notes.
 
 **UART:** USB-UART + cisco/ethernet console on hand.
 
-Charts list **every considered device** with a number — even if `hyp` or `0`.
-Rejects = one line only (still charted at 0 if MCU-class).
+Charts list **every considered device**. Rejects = one line only (MCU-class stay at 0).
 
 **Reset column:** can we recover from a backup / stock ROM after a bad flash?
 
