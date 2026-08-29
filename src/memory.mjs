@@ -1,3 +1,4 @@
+import os from 'node:os';
 import {
   artifactSizeBytes,
   cpuResidentWeightBytes,
@@ -6,10 +7,14 @@ import {
 
 const GiB = 1024 ** 3;
 const HEADROOM_FLOOR_BYTES = 2 * GiB;
+const PHONE_HEADROOM_BYTES = 256 * 1024 * 1024;
 const CPU_RESIDENT_FACTOR = 1.6;
 const CPU_RESIDENT_PAD_BYTES = 512 * 1024 * 1024;
 
-export function headroomBytes(_totalMemoryBytes) {
+/** 2 GiB on PCs; 256 MiB on phones so a 0.5B nexus can admit under ~3 GiB free. */
+export function headroomBytes(totalMemoryBytes = os.totalmem()) {
+  const total = Number(totalMemoryBytes);
+  if (Number.isFinite(total) && total > 0 && total < 8 * GiB) return PHONE_HEADROOM_BYTES;
   return HEADROOM_FLOOR_BYTES;
 }
 

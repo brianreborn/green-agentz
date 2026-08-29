@@ -42,7 +42,7 @@ Bar scale: tok/s 1#≈1; tok/W 1#≈0.25; J/tok 1#≈1 J. Width 40 (clip; shalom
 ```
 shalom      48    meas  ########################################   2026-08-29 CPU ngl0 tg8 (clip@40); Vulkan ngl99 tg8=8.4
 pixel8      20–40 est   ################################........
-note9        8–15 est   ###############.........................
+note9       23.8  meas  #######################.................   2026-08-29 CPU 4t tg32 (pp64=36.8); no root
 EN2251       4–10 hyp   ##########..............................   Puma7 dual Atom if shelled AND ≥1GB free
 godslove     4–8  est   ########................................
 qodesh       3.0  meas  ###.....................................   2026-08-29 8-tok; was 2.5
@@ -61,7 +61,7 @@ J3B          0    hyp   ........................................   BT headset/do
 ```
 pixel8      5–8     est ################################
 shalom      2.7–4.0 meas ############........................    48 tok/s / 12–18 W
-note9       1.5–3   est ############............................
+note9       3–5     est ################........................   23.8 tok/s / 5–8 W load
 EN2251      0.4–1.0 hyp ####....................................   ~10–17 W Hitron wall
 SAX2V1R     0.2–0.6 hyp ##......................................   ~8–15 W AP load
 godslove    0.10–0.20 est #.......................................
@@ -102,7 +102,7 @@ Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW
 | **qodesh** | live | GRZ | **16 GB** DDR3 | yes — **3.0 meas** CPU |
 | **godslove** | live OS | FreeBSD | **8 GB** | likely |
 | **pixel8** | userland | KernelSU | 8 GB class | likely; no 0.5B meas yet |
-| **note9** | userland | Magisk; ADB on shalom | **5.7 GB** (MemTotal 5710492 kB; ~3.0 GB avail) | **SM-N960U / SDM845 / Adreno 630** |
+| **note9** | userland (no root used) | ADB shell `/data/local/tmp/grz` on shalom | **5.7 GB** (MemTotal 5710492 kB; ~3.0 GB avail) | **SM-N960U / SDM845 / Adreno 630** — **23.8 meas** CPU tg32 |
 | **QD65NF** | userland | ADB | SoC **max 2 GB** DDR3 | tight under Fire OS |
 | **TU7000** | userland | SDB | unpublished | unknown; 4-core Crystal 4K |
 | **SAX2V1R** | uart | none | unpublished (**≠** SAX1 2 GB) | unknown until silk |
@@ -137,7 +137,7 @@ Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW
 | **qodesh** | Athlon II X2; **8600 GT 224 MB sm_1.1** (CUDA 6.5 back-compat goal); 16 GB DDR3 | Win11 | **3.0 meas** CPU interim (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ; GPU path = **build**, not Vulkan |
 | **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 est | FreeBSD install media / ZFS bootenv if set | CPU then GL |
 | **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 est | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
-| **note9** | **SM-N960U** `crownqltesq`; **SDM845**; Adreno 630 (GLES 3.2); 8× Kryo; **5.7 GB**; Android 10 / API 29; serial `27841130ae1c7ece` | Android 10 | 8–15 est | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+OpenCL/Vulkan |
+| **note9** | **SM-N960U** `crownqltesq`; **SDM845**; Adreno 630 (GLES 3.2); 8× Kryo; **5.7 GB**; Android 10 / API 29; serial `27841130ae1c7ece` | Android 10 | **23.8 meas** CPU 4t tg32 (pp64 **36.8**); pack in `/data/local/tmp/grz`, server `:8080` via adb forward | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | **no-root ADB shell now**; Termux Node gateway needs `allow-external-apps` or manual; OpenCL/Vulkan later |
 | **QD65NF** | **55QD65NF** Costco Fire TV QLED; **MT9602** 4×A53 @ 1.5 GHz + Mali-G52 2EE MC1; SoC **max 2 GB** DDR3; 55" rated **125 W** | **Fire TV** | **2–6 est** | **Partial** — Fire TV USB recovery / Amazon factory reset; Hisense USB update packages exist by SKU; not as clean as Pixel fastboot. Confirm exact recovery menu on unit. | **ADB easy; full root not.** Sideload/dev options = Fire TV normal. No public one-click Magisk for this Fire OEM SKU. Cousin: Hisense **Google/VIDAA** U8N MT9618 has XDA Magisk (UART+fastboot unlock) — different OS/SoC. Fire sticks/Cubes have exploits; **OEM Fire panels generally do not.** |
 | **SAX2V1R** | Sercomm **IP6442B**; FCC **P27IP6442B**; Spectrum SAX2V1R; Wi‑Fi 6E (PHY up to 4803.9 Mbps); 12 V. Cousin SAX1V1K = Askey IPQ8072A + 2 GB + OpenWrt — **different SoC, do not assume 2 GB** | Spectrum Linux | **2–6 hyp** | **Partial** — dual U-Boot slots on Askey cousins; dump eMMC before flash; stock Spectrum image hard to re-fetch (ISP). Dump first. | UART |
 | **TU7000** | 2020 Crystal UHD; **Crystal Processor 4K** (4 cores advertised); Tizen 5.5; Bishop Fox path demoed on **UN43TU700D** | Tizen | **1–4 hyp** | **Yes** — Samsung USB firmware / SmartThings / factory reset; Tizen recovery documented | SDB |
@@ -245,6 +245,22 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 | 0.5B worker meas | **48 tok/s** CPU ngl0 tg8; Vulkan tg8 **8.4** (do not use 610M for 0.5B) |
 | 4B / 7B | impractical right now (RAM: ~3 GB free + 2 GiB headroom) |
 | Git | `C:\Users\brian\Documents\green-roomz` = canonical |
+
+---
+
+## Note 9 test status (USB on shalom, 2026-08-29)
+
+| gate | status |
+|---|---|
+| ADB | `27841130ae1c7ece device` SM-N960U, **no root** |
+| CPU pack | llama.cpp 0.3.0 NDK 29 arm64; backends next to bin |
+| llama-bench 4t | **pp64 36.8** / **tg32 23.8** on 0.5B Q4 |
+| Termux Node | **v26.4.0**; GRZ in `~/green-roomz`; runtime in `~/grz-runtime` |
+| Gateway | **listening** `127.0.0.1:8080`; `adb forward tcp:18080 tcp:8080` |
+| tool-router-agent | **ready** resident; chat 200 ~4.5 s via forward |
+| Specialists | unavailable (no extra GGUFs) |
+| Do not | execute ELF from `/data/local/tmp` as Termux (SELinux); do not Magisk |
+| Handoff | `docs/note9-termux.md` |
 
 ---
 

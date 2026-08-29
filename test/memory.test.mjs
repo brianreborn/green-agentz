@@ -24,10 +24,11 @@ function gpuProfile() {
   return { id: 'vulkan-all', args: ['--device', 'Vulkan0', '--n-gpu-layers', 'all'] };
 }
 
-test('headroom is a constant 2 GiB floor', () => {
-  assert.equal(headroomBytes(), 2 * GiB);
+test('headroom is 2 GiB on PCs and 256 MiB on phones', () => {
   assert.equal(headroomBytes(15.24 * GiB), 2 * GiB);
-  assert.equal(headroomBytes(1 * GiB), 2 * GiB);
+  assert.equal(headroomBytes(16 * GiB), 2 * GiB);
+  assert.equal(headroomBytes(1 * GiB), 256 * 1024 * 1024);
+  assert.equal(headroomBytes(5.7 * GiB), 256 * 1024 * 1024);
 });
 
 test('CPU profile is rejected when 4.4 GiB file plus pad and 2 GiB headroom exceed 5 GiB free', () => {

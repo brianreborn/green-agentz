@@ -30,6 +30,8 @@ Still open:
 - HTTP `192.168.1.251:8765` must stay bound to LAN (not 127.0.0.1). Duplicate python listeners caused 404/335-byte fake GGUFs.
 - Grok Bot local-exec on both PCs can drop mid-command; reconnect and continue. Do not Shell two `machineId`s in one parent turn.
 - McAfee on shalom: no Add-Type/P/Invoke; long PowerShell here-strings abort; do not disable RTS.
+- **Note 9 Termux cannot exec `/data/local/tmp`.** SELinux `untrusted_app`. Copy llama pack to `~/grz-runtime`. `/sdcard` is noexec; needs `termux-setup-storage` to read `Download/`.
+- **Phone RAM headroom.** 2 GiB floor blocked 0.5B nexus on ~3 GiB free. `headroomBytes()` is 256 MiB when `totalmem < 8 GiB`.
 - CUDA 6.5 installer is **on disk only** (`C:\LocalAI\_tmp\cuda_6.5.19_windows_general_64.exe`, md5 `63575eee9cb5cbf3e84f9c4496060399`). Do not run it on Win11/8600 (driver risk). 224MB VRAM cannot hold 0.5B Q4.
 
 ## Known limitations: file drop vs agent switch
