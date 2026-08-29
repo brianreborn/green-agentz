@@ -31,6 +31,16 @@ export const HANDOFF_PEEK_CHARS = 48;
 export const NEXUS_MAX_TOKENS = 96;
 /** Consult abort; slow boxes fall back to the offline plan rather than hang the chat. */
 export const NEXUS_CONSULT_TIMEOUT_MS = 25_000;
+/**
+ * Hard ceiling on any single upstream backend request (proxy + native paths).
+ * A stalled llama.cpp must not pin a policy slot forever. Override per-manifest
+ * with gateway.upstream_timeout_ms.
+ */
+export const UPSTREAM_TIMEOUT_MS = 180_000;
+/** Peek/handoff hop ceiling — a stalled specialist stream must not wedge routing. */
+export const HANDOFF_PEEK_TIMEOUT_MS = 20_000;
+/** Cap on a buffered (non-streaming) upstream response we will read into memory. */
+export const UPSTREAM_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
 /**
  * Names for existing layers (not new runtimes):
@@ -62,6 +72,7 @@ export const ORCHESTRATOR_BOUNDED_KEYS = Object.freeze([
   'retry_initial_ms',
   'retry_max_ms',
   'retry_deadline_ms',
+  'upstream_timeout_ms',
   'session_ttl_ms',
   'session_limit',
   'cors_origins',

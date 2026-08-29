@@ -1,16 +1,16 @@
 import { createServer } from 'node:http';
-import { AGENCY_ROLE, DEFAULT_FAITH, DEFAULT_FEAR, FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS, REBUKE_OP, YOLO_TOKEN } from './constants.mjs';
+import { AGENCY_ROLE, DEFAULT_FAITH, DEFAULT_FEAR, FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS, REBUKE_OP, UPSTREAM_MAX_BUFFER_BYTES, UPSTREAM_TIMEOUT_MS, YOLO_TOKEN } from './constants.mjs';
 import { loadDeclaredKernel } from './config.mjs';
 import { Mailbox } from './mailbox.mjs';
 import { CAP, MonitorIpc } from './monitor/ipc.mjs';
 import { createLogger } from './monitor/logger.mjs';
-import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
+import { GreenRoomzError, UnavailableError, UpstreamProtocolError, UpstreamTimeoutError, ValidationError } from './errors.mjs';
 import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
 import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, parseSlashCommand, stripSlashCommand } from './routing.mjs';
-import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
+import { deadlineSignal, headerSafe, isTimeoutAbort, jsonResponse, readCappedText, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
   '/health',
@@ -238,7 +238,9 @@ export class Gateway {
       return await this.handleInference(request, response, body, identity, cors, url.pathname);
     } catch (error) {
       const status = error instanceof GreenRoomzError ? error.status : 500;
-      const retryAfter = error instanceof UnavailableError ? { 'retry-after': '2' } : {};
+      const retryAfter = (error instanceof UnavailableError || error instanceof UpstreamTimeoutError)
+        ? { 'retry-after': '2' }
+        : {};
       return jsonResponse(response, status, {
         error: {
           message: redact(error.message),
@@ -364,15 +366,28 @@ export class Gateway {
     await this.processes.ensure(agent, { signal: request.abortSignal });
     const payload = nativePayload(native.kind, body, alias);
     const target = `http://127.0.0.1:${agent.port}${native.path}`;
-    const upstream = await this.fetchImpl(target, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify(payload),
-      signal: request.abortSignal,
-    });
-    const raw = typeof upstream.text === 'function'
-      ? await upstream.text()
-      : JSON.stringify(await upstream.json());
+    const upstreamTimeout = this.manifest.gateway.upstream_timeout_ms ?? UPSTREAM_TIMEOUT_MS;
+    let upstream;
+    try {
+      upstream = await this.fetchImpl(target, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', connection: 'close' },
+        body: JSON.stringify(payload),
+        signal: deadlineSignal(request.abortSignal, upstreamTimeout),
+      });
+    } catch (error) {
+      if (isTimeoutAbort(error, request.abortSignal)) {
+        throw new UpstreamTimeoutError(`${alias} timed out`, { timeout_ms: upstreamTimeout });
+      }
+      throw error;
+    }
+    let raw;
+    try {
+      raw = await readCappedText(upstream, this.manifest.gateway.upstream_max_buffer_bytes ?? UPSTREAM_MAX_BUFFER_BYTES);
+    } catch (error) {
+      if (error?.code === 'UPSTREAM_TOO_LARGE') throw new UpstreamProtocolError(`${alias} response exceeded buffer cap`);
+      throw error;
+    }
     let parsed;
     try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
     this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
