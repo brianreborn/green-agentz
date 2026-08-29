@@ -26,24 +26,27 @@ export function estimateResidentBytes(agent, profile, { includeDraft } = {}) {
   return Math.round(weights * CPU_RESIDENT_FACTOR + CPU_RESIDENT_PAD_BYTES);
 }
 
+/**
+ * Admission is advisory, not a veto. mmap'd weights and KV are reclaimable —
+ * the OS pages. We never refuse to load a model just because `free` RAM is low;
+ * we only flag memory pressure so /health and logs can show a degraded run.
+ * The one genuine stop is a missing/zero-byte model file (caught upstream as a
+ * missing artifact, not here).
+ */
 export function profileAdmitted(agent, profile, { freeMemoryBytes, includeDraft } = {}) {
   const headroom = headroomBytes();
   const estimateBytes = estimateResidentBytes(agent, profile, { includeDraft });
   if (estimateBytes == null) {
-    return { ok: true, estimateBytes: null, headroomBytes: headroom, reason: 'unknown' };
+    return { ok: true, estimateBytes: null, headroomBytes: headroom, reason: 'unknown', pressure: 'unknown' };
   }
   if (!Number.isFinite(freeMemoryBytes)) {
-    return { ok: true, estimateBytes, headroomBytes: headroom, reason: 'unknown-free' };
+    return { ok: true, estimateBytes, headroomBytes: headroom, reason: 'unknown-free', pressure: 'unknown' };
   }
   if (estimateBytes + headroom <= freeMemoryBytes) {
-    return { ok: true, estimateBytes, headroomBytes: headroom, reason: 'admitted' };
+    return { ok: true, estimateBytes, headroomBytes: headroom, reason: 'admitted', pressure: 'ok' };
   }
-  return {
-    ok: false,
-    estimateBytes,
-    headroomBytes: headroom,
-    reason: 'impractical',
-  };
+  // Load anyway; let the OS page. Report the pressure for observability.
+  return { ok: true, estimateBytes, headroomBytes: headroom, reason: 'tight', pressure: 'tight' };
 }
 
 export function agentCanAdmit(agent, { freeMemoryBytes, includeDraft } = {}) {
@@ -53,24 +56,18 @@ export function agentCanAdmit(agent, { freeMemoryBytes, includeDraft } = {}) {
   const profiles = agent.profiles?.length ? agent.profiles : [{ id: 'default', args: [] }];
   const draft = includeDraft ?? Boolean(agent.draft_enabled && agent.draft_model);
   let admitted = null;
+  let tight = null;
   let unknown = null;
-  let impractical = null;
   for (const profile of profiles) {
     const admission = profileAdmitted(agent, profile, { freeMemoryBytes, includeDraft: draft });
     const tagged = { ...admission, profileId: profile.id };
-    if (admission.ok && admission.reason === 'admitted') {
-      if (!admitted) admitted = tagged;
-    } else if (admission.ok) {
-      if (!unknown) unknown = tagged;
-    } else if (admission.reason === 'impractical') {
-      if (!impractical || (admission.estimateBytes ?? 0) > (impractical.estimateBytes ?? 0)) impractical = tagged;
-    }
+    if (admission.reason === 'admitted') { if (!admitted) admitted = tagged; }
+    else if (admission.reason === 'tight') {
+      if (!tight || (admission.estimateBytes ?? 0) < (tight.estimateBytes ?? Infinity)) tight = tagged;
+    } else if (!unknown) unknown = tagged;
   }
-  if (admitted) return admitted;
-  // A CPU-impractical specialist must not hop via Vulkan/"unknown" GPU just because those profiles skip the RAM check.
-  if (impractical) return impractical;
-  if (unknown) return unknown;
-  return { ok: true, reason: 'unknown', estimateBytes: null, headroomBytes: headroomBytes() };
+  // Everything is admittable now; prefer a comfortable profile, else the tightest-fitting.
+  return admitted ?? unknown ?? tight ?? { ok: true, reason: 'unknown', estimateBytes: null, headroomBytes: headroomBytes(), pressure: 'unknown' };
 }
 
 export { artifactSizeBytes, cpuResidentWeightBytes, profileKeepsWeightsOnCpu };

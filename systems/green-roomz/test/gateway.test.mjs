@@ -242,19 +242,44 @@ test('explicit translate prompt proxies to general-text-speculator', async (t) =
   assert.equal(result.body.choices[0].message.content, 'Hello world');
 });
 
-test('public bind is rejected without explicit security flags', async () => {
-  const manifest = sampleManifest();
-  const registry = new AgentRegistry(manifest);
-  const gateway = new Gateway({
-    manifest,
-    registry,
-    processes: new ProcessManager({ manifest, registry }),
-    sessions: new SessionLedger(),
-    policy: new PolicyGate('maximize'),
-  });
+test('bind-all needs the override; a specific LAN host needs allow_peers or a key', async () => {
+  const mk = (gw = {}) => {
+    const manifest = sampleManifest({ gateway: gw });
+    const registry = new AgentRegistry(manifest);
+    return new Gateway({ manifest, registry, processes: new ProcessManager({ manifest, registry }), sessions: new SessionLedger(), policy: new PolicyGate('maximize') });
+  };
   delete process.env.GREEN_ROOMZ_API_KEY;
   delete process.env.GREEN_ROOMZ_ALLOW_PUBLIC;
-  assert.throws(() => gateway.bindAddress('0.0.0.0'), /Public\/non-loopback/);
+
+  assert.throws(() => mk().bindAddress('0.0.0.0'), /all interfaces/);
+  assert.throws(() => mk().bindAddress('192.168.1.5'), /allow_peers/);
+  // an explicit peer list is the gate - a specific LAN bind is then allowed
+  assert.equal(mk({ allow_peers: ['192.168.1.42'] }).bindAddress('192.168.1.5'), '192.168.1.5');
+  // loopback always fine
+  assert.equal(mk().bindAddress('127.0.0.1'), '127.0.0.1');
+});
+
+test('peerAllowed gates non-loopback clients against the allowlist', async () => {
+  const { peerAllowed, normalizeAddr } = await import('../src/gateway.mjs');
+  assert.equal(peerAllowed('127.0.0.1', []), true);
+  assert.equal(peerAllowed('::1', []), true);
+  assert.equal(peerAllowed('::ffff:127.0.0.1', []), true);
+  assert.equal(normalizeAddr('::ffff:192.168.1.42'), '192.168.1.42');
+  assert.equal(peerAllowed('192.168.1.42', ['192.168.1.42']), true);
+  assert.equal(peerAllowed('::ffff:192.168.1.42', ['192.168.1.42']), true);
+  assert.equal(peerAllowed('192.168.1.43', ['192.168.1.42']), false);
+  assert.equal(peerAllowed('192.168.1.99', ['192.168.1.0/24']), true);
+  assert.equal(peerAllowed('10.0.0.1', ['192.168.1.0/24']), false);
+});
+
+test('a request from a disallowed peer is 403', async (t) => {
+  const { server, gateway } = await withServer(t);
+  gateway.manifest.gateway.allow_peers = ['203.0.113.7'];
+  // simulate a non-loopback client by overriding what handle() sees
+  const orig = gateway.handle.bind(gateway);
+  gateway.handle = (req, res) => { Object.defineProperty(req.socket, 'remoteAddress', { value: '198.51.100.9', configurable: true }); return orig(req, res); };
+  const res = await request(server, { path: '/v1/health' });
+  assert.equal(res.status, 403);
 });
 
 test('bearer auth is required when an API key is configured', async (t) => {

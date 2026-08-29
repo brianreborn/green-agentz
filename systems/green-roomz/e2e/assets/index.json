@@ -1,0 +1,20 @@
+[
+  {
+    "file": "hello-world.wav",
+    "text": "Hello world.",
+    "expect": "hello,?\\s*world",
+    "flags": "i"
+  },
+  {
+    "file": "quick-brown-fox.wav",
+    "text": "The quick brown fox jumps over the lazy dog.",
+    "expect": "quick brown fox",
+    "flags": "i"
+  },
+  {
+    "file": "green-roomz-probe.wav",
+    "text": "Green roomz audio transcription health probe.",
+    "expect": "green\\s*room",
+    "flags": "i"
+  }
+]

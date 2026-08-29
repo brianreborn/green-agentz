@@ -1,16 +1,16 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import { AGENCY_ROLE, DEFAULT_FAITH, DEFAULT_FEAR, FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS, REBUKE_OP, UPSTREAM_MAX_BUFFER_BYTES, UPSTREAM_TIMEOUT_MS, YOLO_TOKEN } from './constants.mjs';
+import { loadDeclaredKernel } from './config.mjs';
 import { Mailbox } from './mailbox.mjs';
 import { CAP, MonitorIpc } from './monitor/ipc.mjs';
 import { createLogger } from './monitor/logger.mjs';
-import { GreenRoomzError, UnavailableError, ValidationError } from './errors.mjs';
+import { GreenRoomzError, UnavailableError, UpstreamProtocolError, UpstreamTimeoutError, ValidationError } from './errors.mjs';
 import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
-import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, stripSlashCommand } from './routing.mjs';
-import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
+import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, parseSlashCommand, stripSlashCommand } from './routing.mjs';
+import { deadlineSignal, headerSafe, isTimeoutAbort, jsonResponse, readCappedText, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
   '/health',
@@ -36,6 +36,47 @@ function identityFrom(request, apiKey) {
     return 'authenticated';
   }
   return 'loopback-dev';
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost']);
+
+/** Normalize a Node remoteAddress (drops the v4-in-v6 prefix). */
+export function normalizeAddr(addr) {
+  const a = String(addr ?? '').trim();
+  return a.startsWith('::ffff:') ? a.slice(7) : a;
+}
+
+function ipToLong(ip) {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const p of parts) {
+    const o = Number(p);
+    if (!Number.isInteger(o) || o < 0 || o > 255) return null;
+    n = (n * 256) + o;
+  }
+  return n >>> 0;
+}
+
+/** True if `addr` is loopback, listed exactly, or inside a listed IPv4 CIDR. */
+export function peerAllowed(addr, allowPeers = []) {
+  const ip = normalizeAddr(addr);
+  if (!ip || LOOPBACK.has(ip)) return true;
+  for (const rule of allowPeers) {
+    const r = String(rule).trim();
+    if (r === ip) return true;
+    if (r.includes('/')) {
+      const [net, bitsRaw] = r.split('/');
+      const bits = Number(bitsRaw);
+      const a = ipToLong(ip);
+      const b = ipToLong(net);
+      if (a != null && b != null && bits >= 0 && bits <= 32) {
+        const mask = bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
+        if ((a & mask) === (b & mask)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function readBody(request, limit) {
@@ -69,9 +110,8 @@ function corsHeaders(manifest, origin) {
 
 export function injectSystemPolicy(body, agent) {
   const payload = { ...body };
-  const policyPath = agent?.system_policy;
-  if (!policyPath || !existsSync(policyPath)) return payload;
-  const policy = readFileSync(policyPath, 'utf8');
+  const policy = loadDeclaredKernel(agent);
+  if (!policy) return payload;
   const messages = Array.isArray(payload.messages) ? [...payload.messages] : [];
   const marker = policy.trim().slice(0, 24);
   if (messages.some((message) => message?.role === 'system' && String(message.content ?? '').includes(marker))) {
@@ -109,7 +149,18 @@ function isChatPath(pathname) {
   return path === '/v1/chat/completions' || path.endsWith('/chat/completions');
 }
 
-function wrapNativeAsChat(alias, nativeJson) {
+function wrapNativeAsChat(alias, nativeJson, kind) {
+  let content;
+  if (typeof nativeJson === 'string') content = nativeJson;
+  else if (kind === 'whisper' && typeof nativeJson?.text === 'string') content = nativeJson.text.trim();
+  else if (kind === 'image') {
+    const item = nativeJson?.data?.[0] ?? {};
+    const url = item.url ?? (item.b64_json ? `data:image/png;base64,${item.b64_json}` : null);
+    content = url
+      ? [{ type: 'image_url', image_url: { url } }]
+      : JSON.stringify(nativeJson);
+  }
+  else content = JSON.stringify(nativeJson);
   return {
     id: `grz-native-${alias}`,
     object: 'chat.completion',
@@ -117,7 +168,7 @@ function wrapNativeAsChat(alias, nativeJson) {
     model: alias,
     choices: [{
       index: 0,
-      message: { role: 'assistant', content: typeof nativeJson === 'string' ? nativeJson : JSON.stringify(nativeJson) },
+      message: { role: 'assistant', content },
       finish_reason: 'stop',
     }],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -139,7 +190,41 @@ function nativePayload(kind, body, alias) {
     if (!audio) throw new ValidationError('/audio requires an attached audio part');
     return { audio_data: audio };
   }
+  if (kind === 'image') {
+    const prompt = String(text ?? '').trim();
+    if (!prompt) throw new ValidationError('image generation needs a text prompt');
+    return { prompt, n: 1, response_format: 'b64_json' };
+  }
   return body;
+}
+
+/** data:audio/wav;base64,AAAA  ->  { bytes: Buffer, mime: 'audio/wav', ext: 'wav' } */
+export function decodeDataUrl(dataUrl) {
+  const m = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(String(dataUrl ?? ''));
+  if (!m) return null;
+  const mime = m[1] || 'application/octet-stream';
+  const bytes = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]));
+  const ext = (mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '') || 'bin';
+  return { bytes, mime, ext };
+}
+
+/** Shape the outbound request per native backend: whisper wants multipart, the rest JSON. */
+function nativeRequestInit(kind, payload, signal) {
+  if (kind === 'whisper') {
+    const decoded = decodeDataUrl(payload.audio_data);
+    if (!decoded) throw new ValidationError('audio part is not a decodable data: URL');
+    const form = new FormData();
+    form.set('file', new Blob([decoded.bytes], { type: decoded.mime }), `audio.${decoded.ext}`);
+    form.set('response_format', 'json');
+    form.set('temperature', '0');
+    return { method: 'POST', body: form, signal, headers: { connection: 'close' } };
+  }
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', connection: 'close' },
+    body: JSON.stringify(payload),
+    signal,
+  };
 }
 
 export class Gateway {
@@ -159,14 +244,35 @@ export class Gateway {
       role: 'green-roomz',
     });
     this.logger = logger ?? createLogger();
+    this.extraPeers = [];
+  }
+
+  /** Static manifest allow_peers plus any injected at launch (e.g. by the adb harness). */
+  effectivePeers() {
+    return [...(this.manifest.gateway.allow_peers ?? []), ...this.extraPeers];
+  }
+
+  /** Launch harness hook: trust these peer IPs/CIDRs for this process only. */
+  addPeers(peers = []) {
+    for (const p of peers) if (p && !this.extraPeers.includes(p)) this.extraPeers.push(String(p));
+    return this.effectivePeers();
   }
 
   bindAddress(host) {
     const requested = host ?? this.manifest.gateway.host ?? '127.0.0.1';
     const loopback = requested === '127.0.0.1' || requested === 'localhost' || requested === '::1';
+    const bindAll = requested === '0.0.0.0' || requested === '::';
+    const allowPeers = this.manifest.gateway.allow_peers ?? [];
     if (!loopback) {
-      if (!this.apiKey || process.env.GREEN_ROOMZ_ALLOW_PUBLIC !== '1') {
-        throw new ValidationError('Public/non-loopback binding requires GREEN_ROOMZ_API_KEY and GREEN_ROOMZ_ALLOW_PUBLIC=1');
+      // Binding to a specific LAN address is allowed when an explicit peer
+      // allowlist is set (the allowlist is the gate) OR an API key is configured.
+      // Binding to 0.0.0.0/:: (every interface) still needs the explicit override.
+      const gated = allowPeers.length > 0 || this.extraPeers.length > 0 || Boolean(this.apiKey);
+      if (bindAll && process.env.GREEN_ROOMZ_ALLOW_PUBLIC !== '1') {
+        throw new ValidationError('Binding to all interfaces requires GREEN_ROOMZ_ALLOW_PUBLIC=1; prefer a specific host + gateway.allow_peers');
+      }
+      if (!bindAll && !gated) {
+        throw new ValidationError('Non-loopback binding requires gateway.allow_peers (a peer IP list) or GREEN_ROOMZ_API_KEY');
       }
     }
     return requested;
@@ -186,6 +292,10 @@ export class Gateway {
     }
     const url = new URL(request.url, 'http://127.0.0.1');
     try {
+      const remote = request.socket?.remoteAddress;
+      if (!peerAllowed(remote, this.effectivePeers())) {
+        return jsonResponse(response, 403, { error: { message: 'Peer not allowed', type: 'forbidden_peer' } }, cors);
+      }
       const identity = identityFrom(request, this.apiKey);
       if (!identity) return jsonResponse(response, 401, { error: { message: 'Unauthorized', type: 'auth_error' } }, cors);
       if (!EXPLICIT_ROUTES.has(url.pathname) && !url.pathname.endsWith('/route')) {
@@ -239,7 +349,9 @@ export class Gateway {
       return await this.handleInference(request, response, body, identity, cors, url.pathname);
     } catch (error) {
       const status = error instanceof GreenRoomzError ? error.status : 500;
-      const retryAfter = error instanceof UnavailableError ? { 'retry-after': '2' } : {};
+      const retryAfter = (error instanceof UnavailableError || error instanceof UpstreamTimeoutError)
+        ? { 'retry-after': '2' }
+        : {};
       return jsonResponse(response, status, {
         error: {
           message: redact(error.message),
@@ -365,20 +477,30 @@ export class Gateway {
     await this.processes.ensure(agent, { signal: request.abortSignal });
     const payload = nativePayload(native.kind, body, alias);
     const target = `http://127.0.0.1:${agent.port}${native.path}`;
-    const upstream = await this.fetchImpl(target, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', connection: 'close' },
-      body: JSON.stringify(payload),
-      signal: request.abortSignal,
-    });
-    const raw = typeof upstream.text === 'function'
-      ? await upstream.text()
-      : JSON.stringify(await upstream.json());
+    const upstreamTimeout = this.manifest.gateway.upstream_timeout_ms ?? UPSTREAM_TIMEOUT_MS;
+    let upstream;
+    try {
+      const init = nativeRequestInit(native.kind, payload, deadlineSignal(request.abortSignal, upstreamTimeout));
+      upstream = await this.fetchImpl(target, init);
+    } catch (error) {
+      if (error instanceof GreenRoomzError) throw error;
+      if (isTimeoutAbort(error, request.abortSignal)) {
+        throw new UpstreamTimeoutError(`${alias} timed out`, { timeout_ms: upstreamTimeout });
+      }
+      throw error;
+    }
+    let raw;
+    try {
+      raw = await readCappedText(upstream, this.manifest.gateway.upstream_max_buffer_bytes ?? UPSTREAM_MAX_BUFFER_BYTES);
+    } catch (error) {
+      if (error?.code === 'UPSTREAM_TOO_LARGE') throw new UpstreamProtocolError(`${alias} response exceeded buffer cap`);
+      throw error;
+    }
     let parsed;
     try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
     this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
     this.sessions.setAgentAlias(issuedSession, alias);
-    const wrapped = wrapNativeAsChat(alias, parsed);
+    const wrapped = wrapNativeAsChat(alias, parsed, native.kind);
     return jsonResponse(
       response,
       upstream.status >= 400 ? upstream.status : 200,
@@ -400,6 +522,7 @@ export class Gateway {
       'x-green-roomz-route-reason': headerSafe(routed.reason ?? ''),
       'x-green-roomz-hops': headerSafe(extra.hops ?? ''),
       'x-green-roomz-nexus': NEXUS_ALIAS,
+      'x-green-roomz-agency': AGENCY_ROLE,
       ...cors,
     };
   }
@@ -421,6 +544,29 @@ export class Gateway {
     }
 
     return this.handleChatTurn(request, response, body, identity, session, cors, pathname);
+  }
+
+  /**
+   * Persist any /faith /fear /confidence /yolo /rebuke setting carried on this turn
+   * to the session, then report the faith/fear levels the nexus consult should run at.
+   * hardRuleRoute already parsed (and would have thrown on) a bad slash command.
+   */
+  applyTurnSettings(issuedSession, identity, body) {
+    let slash = null;
+    try { slash = parseSlashCommand(body); } catch { slash = null; }
+    if (slash?.setting) {
+      const patch = {};
+      if (slash.setting === 'faith') patch.faith = slash.faith;
+      else if (slash.setting === 'fear') patch.fear = slash.fear;
+      else if (slash.setting === 'confidence') patch.confidenceMood = slash.confidenceMood;
+      else if (slash.setting === YOLO_TOKEN) patch.yolo = slash.yolo;
+      if (Object.keys(patch).length) this.sessions.patch(issuedSession, patch);
+    }
+    if (slash?.op === REBUKE_OP) {
+      this.sessions.patch(issuedSession, { op: REBUKE_OP, rebuke: slash.rest || null });
+    }
+    const entry = this.sessions.get(issuedSession, identity);
+    return { faithLevel: entry?.faith ?? DEFAULT_FAITH, fearLevel: entry?.fear ?? DEFAULT_FEAR };
   }
 
   async handleRoutePlan(request, response, body, identity, session, cors) {
@@ -446,6 +592,9 @@ export class Gateway {
       }, this.routeHeaders(issuedSession, routed, cors, { hops: '' }));
     }
     const consultBody = stripSlashCommand(body);
+    const settings = session?.id
+      ? this.applyTurnSettings(session.id, identity, body)
+      : { faithLevel: DEFAULT_FAITH, fearLevel: DEFAULT_FEAR };
     const nexusLive = this.registry.status(NEXUS_ALIAS).state !== 'unavailable';
     let plan = planRoute({ messages: [{ role: 'user', content: latestUserMessageText(consultBody) }] });
     if (nexusLive) {
@@ -458,6 +607,7 @@ export class Gateway {
           visited: new Set(),
           notes: [],
           signal: request.abortSignal,
+          ...settings,
         });
         if (picked?.route) {
           plan = {
@@ -536,6 +686,7 @@ export class Gateway {
       agentAlias: hard.effectiveAlias ?? FALLBACK_ALIAS,
       modality: hard.modality,
     });
+    const turnSettings = this.applyTurnSettings(issuedSession, identity, body);
 
     const hopHeaders = (alias, reason) => this.routeHeaders(
       issuedSession,
@@ -575,6 +726,7 @@ export class Gateway {
             visited,
             notes,
             signal: request.abortSignal,
+            ...turnSettings,
           });
           alias = picked.route;
           reason = picked.reason ?? 'nexus';
@@ -645,6 +797,14 @@ export class Gateway {
           signal: request.abortSignal,
         });
 
+        if (peek.degraded === 'peek_timeout' && !peek.handoff) {
+          visited.add(alias);
+          hops.push(alias);
+          notes.push(stripControls(`${alias} did not emit within the peek window`));
+          this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'peek_timeout' } });
+          continue;
+        }
+
         if (peek.handoff) {
           const suggest = peek.handoff.suggest && peek.handoff.suggest !== 'null' ? peek.handoff.suggest : null;
           notes.push(stripControls(peek.handoff.reason ?? 'handoff'));
@@ -680,8 +840,26 @@ export class Gateway {
     const address = this.bindAddress(host);
     const listenPort = Number(port ?? this.manifest.gateway.port ?? 8080);
     const server = createServer((req, res) => {
-      Promise.resolve(this.handle(req, res)).catch((error) => { if (!res.headersSent) jsonResponse(res, 500, { error: { message: String(error.message), type: 'internal_error' } }); });
+      // A dead client socket must not take the process down mid-write.
+      req.on('error', () => {});
+      res.on('error', () => {});
+      Promise.resolve(this.handle(req, res)).catch((error) => {
+        try {
+          if (!res.headersSent) {
+            jsonResponse(res, 500, { error: { message: redact(String(error?.message ?? error)), type: 'internal_error' } });
+          } else if (!res.writableEnded) {
+            res.destroy(error instanceof Error ? error : new Error(String(error)));
+          }
+        } catch { /* socket already gone */ }
+      });
     });
+    // Malformed HTTP from a client is a 400, never a crash.
+    server.on('clientError', (_error, socket) => {
+      if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      else socket.destroy();
+    });
+    server.headersTimeout = this.manifest.gateway.headers_timeout_ms ?? 30_000;
+    server.requestTimeout = this.manifest.gateway.request_timeout_ms ?? 0;
     return new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(listenPort, address, () => resolve(server));

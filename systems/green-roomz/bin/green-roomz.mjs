@@ -117,9 +117,14 @@ async function cmdServe(ctx, args) {
     await applyStoreWinners(ctx.processes, { objective });
   } catch {}
   const gateway = new Gateway(ctx);
+  // Launch harness may inject trusted peer IPs (e.g. deploy/adb-peer.mjs resolves
+  // the one adb-attached Android device's shared-subnet IP). Repeatable.
+  const injectedPeers = args.reduce((acc, a, i) => (a === '--allow-peer' && args[i + 1] ? [...acc, args[i + 1]] : acc), []);
+  if (injectedPeers.length) console.error(`allow-peer: ${gateway.addPeers(injectedPeers).join(', ')}`);
   const server = await gateway.listen(argValue(args, '--host'), argValue(args, '--port'));
   const address = server.address();
   console.error(`green-roomz listening on http://${address.address}:${address.port}`);
+  ctx.processes.startIdleSweeper();
   const nexus = ctx.registry.agents.get('tool-router-agent');
   if (nexus && ctx.registry.status(nexus.alias).state !== 'unavailable') {
     try {
@@ -129,14 +134,28 @@ async function cmdServe(ctx, args) {
       console.error(`nexus pre-warm failed: ${error.message}`);
     }
   }
-  const shutdown = async () => {
+  let shuttingDown = false;
+  const shutdown = async (code = 0) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.error('draining owned backends');
     server.close();
-    await ctx.processes.stopAll();
-    process.exit(0);
+    try { await ctx.processes.stopAll(); } catch (error) { console.error(`stopAll failed: ${error?.message}`); }
+    process.exit(code);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => shutdown(0));
+  process.on('SIGTERM', () => shutdown(0));
+
+  // A stray rejection in a request path must not kill the gateway.
+  process.on('unhandledRejection', (reason) => {
+    console.error(`unhandledRejection (continuing): ${reason instanceof Error ? reason.stack : reason}`);
+  });
+  // An uncaught exception may mean corrupt state: log, drain, let the supervisor restart.
+  process.on('uncaughtException', (error) => {
+    console.error(`uncaughtException: ${error?.stack ?? error}`);
+    shutdown(1);
+    setTimeout(() => process.exit(1), 2000).unref();
+  });
 }
 
 async function cmdDeploy(ctx, args) {

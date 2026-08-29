@@ -103,7 +103,7 @@ test('manifest profile order is kept when weight size is unknown', () => {
   assert.deepEqual(ids, ['cpu-4', 'vulkan-all']);
 });
 
-test('start skips cpu-4 spawn when not admitted and uses vulkan-all instead', async () => {
+test('start spawns the preferred profile even under memory pressure (OS pages)', async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'grz-admit-start-'));
   const model = path.join(dir, 'model.gguf');
   writeFileSync(model, '');
@@ -135,9 +135,8 @@ test('start skips cpu-4 spawn when not admitted and uses vulkan-all instead', as
       fetchImpl: async () => ({ ok: true }),
     });
     const record = await manager.start(agent);
-    assert.equal(record.profileId, 'vulkan-all');
+    assert.equal(record.profileId, 'cpu-4', 'first profile is used; RAM math does not veto');
     assert.equal(spawned.length, 1);
-    assert.equal(spawned[0][spawned[0].indexOf('--device') + 1], 'Vulkan0');
     await manager.stop(agent.alias);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -225,4 +224,63 @@ test('ensure specialist does not stop the resident nexus', async () => {
   assert.equal(launch.args[launch.args.indexOf('--threads') + 1], '2');
   assert.equal(launch.args[launch.args.indexOf('--port') + 1], '18187');
   await manager.stopAll();
+});
+
+test('sweepIdle evicts over-cap and stale specialists, keeps the resident nexus', async () => {
+  const manifest = sampleManifest();
+  const registry = new AgentRegistry(manifest);
+  const children = [];
+  const manager = new ProcessManager({
+    manifest,
+    registry,
+    hostAdapter: { applyPriority() {} },
+    spawnImpl: () => { const c = new FakeChild(); children.push(c); return c; },
+    fetchImpl: async () => ({ ok: true }),
+  });
+  manager.maxWarmSpecialists = 1;
+  manager.idleEvictMs = 10_000;
+  const now = Date.now();
+  const put = (alias, resident, lastUsedAt) => manager.processes.set(alias, {
+    alias, resident, owned: true, state: 'ready', createdAt: now, lastUsedAt,
+    child: new FakeChild(),
+  });
+  put('tool-router-agent', true, now);                 // resident - never evicted
+  put('general-text-speculator', false, now - 1_000);  // fresh, within warm cap
+  put('qwenstral-code-speculator', false, now - 2_000); // over cap (cap = 1)
+  put('vision-layout-agent', false, now - 60_000);      // stale + over cap
+
+  const evicted = await manager.sweepIdle(now);
+  assert.ok(evicted.includes('qwenstral-code-speculator'));
+  assert.ok(evicted.includes('vision-layout-agent'));
+  assert.ok(!evicted.includes('tool-router-agent'), 'resident nexus survives');
+  assert.ok(!evicted.includes('general-text-speculator'), 'most-recent specialist stays warm');
+  assert.ok(manager.processes.has('tool-router-agent'));
+  assert.ok(!manager.processes.has('vision-layout-agent'));
+});
+
+test('startIdleSweeper is a no-op when idle eviction is disabled', () => {
+  const manager = new ProcessManager({ manifest: sampleManifest(), registry: new AgentRegistry(sampleManifest()) });
+  manager.idleEvictMs = 0;
+  manager.startIdleSweeper();
+  assert.equal(manager.idleSweeper, null);
+});
+
+test('buildLaunch defaults the KV cache to q8_0, honours an explicit profile choice, and f16 opt-out', () => {
+  const manifest = sampleManifest();
+  const agent = manifest.agents.find((item) => item.alias === 'tool-router-agent');
+  const registry = new AgentRegistry(manifest);
+  const manager = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('no spawn'); } });
+
+  const dflt = manager.buildLaunch(agent, { id: 'cpu-2', args: ['--device', 'none'] });
+  assert.deepEqual(
+    [dflt.args[dflt.args.indexOf('--cache-type-k') + 1], dflt.args[dflt.args.indexOf('--cache-type-v') + 1]],
+    ['q8_0', 'q8_0'],
+  );
+
+  const explicit = manager.buildLaunch(agent, { id: 'cpu-2', args: ['--device', 'none', '--cache-type-k', 'q4_0', '--cache-type-v', 'q4_0'] });
+  assert.equal(explicit.args.filter((a) => a === '--cache-type-k').length, 1);
+  assert.equal(explicit.args[explicit.args.indexOf('--cache-type-k') + 1], 'q4_0');
+
+  const f16 = manager.buildLaunch({ ...agent, kv_cache: 'f16' }, { id: 'cpu-2', args: ['--device', 'none'] });
+  assert.equal(f16.args.includes('--cache-type-k'), false);
 });

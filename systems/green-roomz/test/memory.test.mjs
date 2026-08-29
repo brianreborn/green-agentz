@@ -31,7 +31,7 @@ test('headroom is 2 GiB on PCs and 256 MiB on phones', () => {
   assert.equal(headroomBytes(5.7 * GiB), 256 * 1024 * 1024);
 });
 
-test('CPU profile is rejected when 4.4 GiB file plus pad and 2 GiB headroom exceed 5 GiB free', () => {
+test('a CPU profile over the free-RAM estimate is admitted but flagged tight (OS pages)', () => {
   const { model, cleanup } = withModel();
   try {
     const agent = { alias: 'qwenstral-code-speculator', model, draft_enabled: false };
@@ -39,10 +39,10 @@ test('CPU profile is rejected when 4.4 GiB file plus pad and 2 GiB headroom exce
     const estimate = estimateResidentBytes(agent, profile, { includeDraft: false });
     assert.equal(estimate, Math.round(MODEL_BYTES * 1.6 + 512 * 1024 * 1024));
     const tight = profileAdmitted(agent, profile, { freeMemoryBytes: 5 * GiB, includeDraft: false });
-    assert.equal(tight.ok, false);
-    assert.equal(tight.reason, 'impractical');
+    assert.equal(tight.ok, true, 'never vetoed on free RAM');
+    assert.equal(tight.reason, 'tight');
+    assert.equal(tight.pressure, 'tight');
     assert.equal(tight.estimateBytes, estimate);
-    assert.equal(tight.headroomBytes, 2 * GiB);
     assert.ok(tight.estimateBytes + tight.headroomBytes > 5 * GiB);
   } finally {
     cleanup();
@@ -83,18 +83,16 @@ test('missing model is admitted as unknown rather than rejected', () => {
   assert.equal(admitted.reason, 'unknown');
 });
 
-test('agentCanAdmit is false when CPU is impractical even if a GPU profile is unknown', () => {
+test('agentCanAdmit always admits under memory pressure (OS pages); CPU-only run is flagged tight', () => {
   const { model, cleanup } = withModel();
   try {
-    const agent = {
-      alias: 'qwenstral-code-speculator',
-      model,
-      draft_enabled: false,
-      profiles: [cpuProfile(), gpuProfile()],
-    };
-    const result = agentCanAdmit(agent, { freeMemoryBytes: 5 * GiB, includeDraft: false });
-    assert.equal(result.ok, false);
-    assert.equal(result.reason, 'impractical');
+    const withGpu = { alias: 'qwenstral-code-speculator', model, draft_enabled: false, profiles: [cpuProfile(), gpuProfile()] };
+    assert.equal(agentCanAdmit(withGpu, { freeMemoryBytes: 5 * GiB, includeDraft: false }).ok, true);
+
+    const cpuOnly = { alias: 'qwenstral-code-speculator', model, draft_enabled: false, profiles: [cpuProfile()] };
+    const tight = agentCanAdmit(cpuOnly, { freeMemoryBytes: 5 * GiB, includeDraft: false });
+    assert.equal(tight.ok, true);
+    assert.equal(tight.pressure, 'tight');
   } finally {
     cleanup();
   }

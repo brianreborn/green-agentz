@@ -11,7 +11,9 @@
     "start": "node ./bin/green-roomz.mjs serve",
     "validate": "node ./bin/green-roomz.mjs validate",
     "benchmark": "node ./bin/green-roomz.mjs benchmark",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "node --test ./e2e/gateway.e2e.mjs",
+    "verify": "node ./e2e/verify-models.mjs"
   },
   "engines": {
     "node": ">=22"
