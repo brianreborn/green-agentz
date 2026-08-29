@@ -1,9 +1,21 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { REQUIRED_ALIASES, POLICIES, TRANSLATION_ALIAS } from './constants.mjs';
+import {
+  REQUIRED_ALIASES,
+  POLICIES,
+  TRANSLATION_ALIAS,
+  KERNEL_BASENAME,
+  CRITICAL_KERNEL_FILES,
+  ORCHESTRATOR_BOUNDED_KEYS,
+  SYSADMIN_SCHEMA_ENV,
+  NEXUS_ALIAS,
+  MONITOR_ALIAS,
+  MICROKERNEL_MAX_CHARS,
+} from './constants.mjs';
 import { ValidationError } from './errors.mjs';
 import { digestObject, expandEnvironment, resolveManifestPath } from './util.mjs';
+import { readFileSync, existsSync } from 'node:fs';
 
 const SECRET_FIELD = /(api[_-]?key|password|secret|token)$/i;
 
@@ -17,9 +29,14 @@ function findSecretFields(value, location = '$', found = []) {
   return found;
 }
 
-export function validateManifest(manifest) {
+export function validateManifest(manifest, env = process.env) {
   const issues = [];
-  if (manifest.schema_version !== 1) issues.push('schema_version must be 1');
+  if (manifest.schema_version !== 1) {
+    const allowed = String(env?.[SYSADMIN_SCHEMA_ENV] ?? '');
+    if (allowed !== String(manifest.schema_version)) {
+      issues.push(`schema_version ${manifest.schema_version} requires sysadmin ${SYSADMIN_SCHEMA_ENV}=${manifest.schema_version}`);
+    }
+  }
   if (!manifest.manifest_version) issues.push('manifest_version is required');
   if (!Array.isArray(manifest.agents)) issues.push('agents must be an array');
 
@@ -31,6 +48,10 @@ export function validateManifest(manifest) {
   }
   if (aliases.includes(TRANSLATION_ALIAS)) issues.push('translation-agent is prohibited; translation is an explicit shared capability');
   if (!POLICIES[manifest.gateway?.policy]) issues.push('gateway.policy must be responsive, balanced, or maximize');
+  if (manifest.gateway && typeof manifest.gateway === 'object') {
+    const extra = Object.keys(manifest.gateway).filter((key) => !ORCHESTRATOR_BOUNDED_KEYS.includes(key));
+    if (extra.length) issues.push(`gateway has unbounded keys (sysadmin schema bump required): ${extra.join(', ')}`);
+  }
 
   const runtimeNames = new Set(Object.keys(manifest.runtimes ?? {}));
   const ports = new Map();
@@ -44,6 +65,7 @@ export function validateManifest(manifest) {
       ports.set(agent.port, agent.alias);
     }
     if (['qwenstral-code-speculator', 'general-text-speculator'].includes(agent.alias) && agent.projector) issues.push(`text-only agent ${agent.alias} cannot declare a projector`);
+    issues.push(...kernelBindingIssues(agent));
   }
 
   const secretFields = findSecretFields(manifest);
@@ -52,16 +74,61 @@ export function validateManifest(manifest) {
   return manifest;
 }
 
+const CRITICAL_MARKERS = Object.freeze([
+  'Do not make authorization decisions',
+  'Async mailbox only',
+]);
+
+export function kernelBindingIssues(agent) {
+  const issues = [];
+  const policy = agent?.system_policy;
+  if (!policy) return issues;
+  const base = path.basename(String(policy).replaceAll('\\', '/'));
+  const expected = KERNEL_BASENAME[agent.alias];
+  if (expected && base !== expected) {
+    issues.push(`agent ${agent.alias} system_policy must be ${expected} (explicit green-brainz kernel), got ${base}`);
+  }
+  if (agent.alias === NEXUS_ALIAS && CRITICAL_KERNEL_FILES.includes(base)) {
+    issues.push(`microkernel cannot bind critical kernel ${base}`);
+  }
+  if (agent.alias === MONITOR_ALIAS && base !== 'security-monitor.md') {
+    issues.push('security-monitor-agent kernel is frozen to security-monitor.md');
+  }
+  return issues;
+}
+
+export function assertNexusKernelText(text) {
+  const body = String(text ?? '');
+  if (body.length > MICROKERNEL_MAX_CHARS) {
+    throw new ValidationError('microkernel exceeds size bound', { length: body.length, max: MICROKERNEL_MAX_CHARS });
+  }
+  for (const marker of CRITICAL_MARKERS) {
+    if (body.includes(marker)) throw new ValidationError('critical rules leaked into microkernel', { marker });
+  }
+  return body;
+}
+
+/** Only the agent's declared system_policy. Never concatenates other kernels. */
+export function loadDeclaredKernel(agent) {
+  const policyPath = agent?.system_policy;
+  if (!policyPath || !existsSync(policyPath)) return null;
+  const text = readFileSync(policyPath, 'utf8');
+  if (agent.alias === NEXUS_ALIAS) assertNexusKernelText(text);
+  return text;
+}
+
 export async function loadManifest(input = new URL('../config/agents.windows.json', import.meta.url), env = process.env) {
   const manifestPath = input instanceof URL ? fileURLToPath(input) : path.resolve(input);
   const raw = await readFile(manifestPath, 'utf8');
   const manifest = expandEnvironment(JSON.parse(raw), env);
-  validateManifest(manifest);
+  validateManifest(manifest, env);
   for (const agent of manifest.agents) {
     for (const field of ['model', 'draft_model', 'projector', 'system_policy']) {
       if (agent[field]) agent[field] = resolveManifestPath(manifestPath, agent[field]);
     }
   }
+  const nexus = manifest.agents.find((agent) => agent.alias === NEXUS_ALIAS);
+  if (nexus?.system_policy) loadDeclaredKernel(nexus);
   Object.defineProperty(manifest, '_meta', { value: Object.freeze({ path: manifestPath, digest: digestObject(JSON.parse(raw)) }), enumerable: false });
   return deepFreeze(manifest);
 }

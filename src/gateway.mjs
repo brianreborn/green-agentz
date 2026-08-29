@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS } from './constants.mjs';
+import { AGENCY_ROLE, DEFAULT_FAITH, DEFAULT_FEAR, FALLBACK_ALIAS, MAX_SPECIALIST_HOPS, MONITOR_ALIAS, NEXUS_ALIAS, REBUKE_OP, YOLO_TOKEN } from './constants.mjs';
+import { loadDeclaredKernel } from './config.mjs';
 import { Mailbox } from './mailbox.mjs';
 import { CAP, MonitorIpc } from './monitor/ipc.mjs';
 import { createLogger } from './monitor/logger.mjs';
@@ -9,7 +9,7 @@ import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
-import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, stripSlashCommand } from './routing.mjs';
+import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, parseSlashCommand, stripSlashCommand } from './routing.mjs';
 import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
@@ -69,9 +69,8 @@ function corsHeaders(manifest, origin) {
 
 export function injectSystemPolicy(body, agent) {
   const payload = { ...body };
-  const policyPath = agent?.system_policy;
-  if (!policyPath || !existsSync(policyPath)) return payload;
-  const policy = readFileSync(policyPath, 'utf8');
+  const policy = loadDeclaredKernel(agent);
+  if (!policy) return payload;
   const messages = Array.isArray(payload.messages) ? [...payload.messages] : [];
   const marker = policy.trim().slice(0, 24);
   if (messages.some((message) => message?.role === 'system' && String(message.content ?? '').includes(marker))) {
@@ -400,6 +399,7 @@ export class Gateway {
       'x-green-roomz-route-reason': headerSafe(routed.reason ?? ''),
       'x-green-roomz-hops': headerSafe(extra.hops ?? ''),
       'x-green-roomz-nexus': NEXUS_ALIAS,
+      'x-green-roomz-agency': AGENCY_ROLE,
       ...cors,
     };
   }
@@ -421,6 +421,29 @@ export class Gateway {
     }
 
     return this.handleChatTurn(request, response, body, identity, session, cors, pathname);
+  }
+
+  /**
+   * Persist any /faith /fear /confidence /yolo /rebuke setting carried on this turn
+   * to the session, then report the faith/fear levels the nexus consult should run at.
+   * hardRuleRoute already parsed (and would have thrown on) a bad slash command.
+   */
+  applyTurnSettings(issuedSession, identity, body) {
+    let slash = null;
+    try { slash = parseSlashCommand(body); } catch { slash = null; }
+    if (slash?.setting) {
+      const patch = {};
+      if (slash.setting === 'faith') patch.faith = slash.faith;
+      else if (slash.setting === 'fear') patch.fear = slash.fear;
+      else if (slash.setting === 'confidence') patch.confidenceMood = slash.confidenceMood;
+      else if (slash.setting === YOLO_TOKEN) patch.yolo = slash.yolo;
+      if (Object.keys(patch).length) this.sessions.patch(issuedSession, patch);
+    }
+    if (slash?.op === REBUKE_OP) {
+      this.sessions.patch(issuedSession, { op: REBUKE_OP, rebuke: slash.rest || null });
+    }
+    const entry = this.sessions.get(issuedSession, identity);
+    return { faithLevel: entry?.faith ?? DEFAULT_FAITH, fearLevel: entry?.fear ?? DEFAULT_FEAR };
   }
 
   async handleRoutePlan(request, response, body, identity, session, cors) {
@@ -446,6 +469,9 @@ export class Gateway {
       }, this.routeHeaders(issuedSession, routed, cors, { hops: '' }));
     }
     const consultBody = stripSlashCommand(body);
+    const settings = session?.id
+      ? this.applyTurnSettings(session.id, identity, body)
+      : { faithLevel: DEFAULT_FAITH, fearLevel: DEFAULT_FEAR };
     const nexusLive = this.registry.status(NEXUS_ALIAS).state !== 'unavailable';
     let plan = planRoute({ messages: [{ role: 'user', content: latestUserMessageText(consultBody) }] });
     if (nexusLive) {
@@ -458,6 +484,7 @@ export class Gateway {
           visited: new Set(),
           notes: [],
           signal: request.abortSignal,
+          ...settings,
         });
         if (picked?.route) {
           plan = {
@@ -536,6 +563,7 @@ export class Gateway {
       agentAlias: hard.effectiveAlias ?? FALLBACK_ALIAS,
       modality: hard.modality,
     });
+    const turnSettings = this.applyTurnSettings(issuedSession, identity, body);
 
     const hopHeaders = (alias, reason) => this.routeHeaders(
       issuedSession,
@@ -575,6 +603,7 @@ export class Gateway {
             visited,
             notes,
             signal: request.abortSignal,
+            ...turnSettings,
           });
           alias = picked.route;
           reason = picked.reason ?? 'nexus';

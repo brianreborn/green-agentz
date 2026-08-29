@@ -1,15 +1,45 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { FALLBACK_ALIAS, MONITOR_ALIAS, NEXUS_ALIAS, NEXUS_CONSULT_TIMEOUT_MS, NEXUS_MAX_TOKENS } from './constants.mjs';
+import {
+  DEFAULT_FAITH,
+  FAITH_LEVELS,
+  FALLBACK_ALIAS,
+  FEAR_LEVELS,
+  MONITOR_ALIAS,
+  NEXUS_ALIAS,
+  NEXUS_CONSULT_TIMEOUT_MS,
+  NEXUS_MAX_TOKENS,
+} from './constants.mjs';
+import { loadDeclaredKernel } from './config.mjs';
 import { planRoute } from './logical-router.mjs';
 import { aliasCanAdmit, availableAliases, detectModalities, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
 import { stripControls } from './util.mjs';
 
+/** In actor runtimes, kernel faith is the `confidence` field. Gateway /faith is a separate knob. */
+export function clampFaith(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+export function interpretKernelFaith(kernelConfidence, faithLevel = DEFAULT_FAITH) {
+  const spec = FAITH_LEVELS[faithLevel] ?? FAITH_LEVELS.medium;
+  return clampFaith(clampFaith(kernelConfidence) * spec.assign);
+}
+
+export function faithRejects(kernelConfidence, { faithLevel = DEFAULT_FAITH, fearLevel = 'low' } = {}) {
+  const interpreted = interpretKernelFaith(kernelConfidence, faithLevel);
+  const faith = FAITH_LEVELS[faithLevel] ?? FAITH_LEVELS.medium;
+  const fear = FEAR_LEVELS[fearLevel] ?? FEAR_LEVELS.low;
+  if (interpreted < faith.minAccept) return 'faith';
+  if (interpreted < fear.refuseBelow) return 'fear';
+  return null;
+}
+
 function withNexusPolicy(payload, agent) {
-  const policyPath = agent?.system_policy;
-  if (!policyPath || !existsSync(policyPath)) return payload;
+  const policy = loadDeclaredKernel(agent);
+  if (!policy) return payload;
   const messages = Array.isArray(payload.messages) ? payload.messages : [];
   if (messages.some((message) => message?.role === 'system')) return payload;
-  return { ...payload, messages: [{ role: 'system', content: readFileSync(policyPath, 'utf8') }, ...messages] };
+  return { ...payload, messages: [{ role: 'system', content: policy }, ...messages] };
 }
 
 export function stripFence(text) {
@@ -59,7 +89,7 @@ export function parseRouteJson(text) {
   if (!value) return null;
   return {
     route: typeof value.route === 'string' ? value.route.trim() : null,
-    confidence: Number(value.confidence),
+    confidence: clampFaith(value.confidence),
     reason: String(value.reason ?? value.reason_code ?? ''),
   };
 }
@@ -205,7 +235,7 @@ async function postNexus({ processes, registry, fetchImpl, body, visited, notes,
   return allowlistedPlan(parseRouteJson(content), registry);
 }
 
-export async function consultNexus({ processes, registry, fetchImpl = fetch, body, visited = new Set(), notes = [], signal } = {}) {
+export async function consultNexus({ processes, registry, fetchImpl = fetch, body, visited = new Set(), notes = [], signal, faithLevel = DEFAULT_FAITH, fearLevel = 'low' } = {}) {
   const nexus = registry.agents.get(NEXUS_ALIAS);
   const status = nexus ? registry.status(NEXUS_ALIAS) : { state: 'unavailable' };
   const live = nexus && status.state !== 'unavailable';
@@ -228,6 +258,9 @@ export async function consultNexus({ processes, registry, fetchImpl = fetch, bod
   let bad = routeIsBad(plan, registry, visited, stripped);
   if (!bad && plan?.route && !admitOk(plan.route)) {
     bad = `${plan.route} unavailable (impractical)`;
+  }
+  if (!bad && live && faithRejects(plan?.confidence ?? 0, { faithLevel, fearLevel })) {
+    bad = `kernel faith ${plan?.confidence ?? 0} rejected`;
   }
   if (bad) {
     plan = await ask(bad);
