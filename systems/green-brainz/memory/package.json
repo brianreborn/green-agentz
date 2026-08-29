@@ -1,0 +1,11 @@
+{
+  "name": "green-memory-kernel-staging",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test ./dreamcatcher-memory.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
