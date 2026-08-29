@@ -37,12 +37,43 @@ test('audio input overrides to audio-transcription-agent', () => {
   assert.equal(routed.effectiveAlias, 'audio-transcription-agent');
 });
 
-test('mixed image and audio is rejected', () => {
-  assert.throws(() => routeRequest({
+test('mixed image and audio goes to nexus instead of throwing', () => {
+  const routed = routeRequest({
     messages: [{ role: 'user', content: [
       { type: 'image_url', image_url: { url: 'data:image/png;base64,x' } },
       { type: 'input_audio', input_audio: { data: 'data:audio/wav;base64,x' } },
     ] }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, null);
+  assert.equal(routed.reason, 'nexus');
+  assert.equal(routed.modality.image, true);
+  assert.equal(routed.modality.audio, true);
+});
+
+test('/vision without an image part is rejected', () => {
+  assert.throws(() => routeRequest({
+    messages: [{ role: 'user', content: '/vision describe this' }],
+  }, registry()), ValidationError);
+});
+
+test('/audio without an audio part is rejected', () => {
+  assert.throws(() => routeRequest({
+    messages: [{ role: 'user', content: '/audio transcribe this' }],
+  }, registry()), ValidationError);
+});
+
+test('/router pins the resident nexus', () => {
+  const routed = hardRuleRoute({
+    model: 'general-text-speculator',
+    messages: [{ role: 'user', content: '/router what are you' }],
+  }, registry());
+  assert.equal(routed.effectiveAlias, 'tool-router-agent');
+  assert.equal(routed.reason, 'slash_router');
+});
+
+test('/tts is rejected on the chat path', () => {
+  assert.throws(() => routeRequest({
+    messages: [{ role: 'user', content: '/tts say hello' }],
   }, registry()), ValidationError);
 });
 

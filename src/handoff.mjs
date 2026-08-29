@@ -153,7 +153,7 @@ export async function peekSpecialist({ fetchImpl = fetch, request, target, body,
   const headers = new Headers();
   for (const [key, value] of Object.entries(request?.headers ?? {})) {
     const lower = key.toLowerCase();
-    if (!value || ['authorization', 'host', 'content-length', 'connection'].includes(lower)) continue;
+    if (!value || !['content-type', 'accept', 'idempotency-key'].includes(lower)) continue;
     headers.set(key, Array.isArray(value) ? value.join(', ') : value);
   }
   headers.set('content-type', 'application/json');
@@ -330,14 +330,21 @@ export async function deliverPeek({ peek, request, response, body, headers = {} 
       while (true) {
         const { done, value } = await peek.reader.read();
         if (done) {
-          if (peek.parser?.carry) response.write(Buffer.from(peek.parser.carry.replace(/\n/g, '\n')));
+          for (const event of peek.parser?.end?.() ?? []) {
+            if (event.done) continue;
+            if (event.json) writeSse(response, sanitizeCompletionJson(event.json, { keepReasoning }));
+          }
           break;
         }
-        if (value) response.write(Buffer.from(value));
+        for (const event of peek.parser?.push?.(value) ?? []) {
+          if (event.done) continue;
+          if (event.json) writeSse(response, sanitizeCompletionJson(event.json, { keepReasoning }));
+        }
       }
     } finally {
       peek.signal?.removeEventListener?.('abort', peek.onParent);
     }
+    response.write('data: [DONE]\n\n');
     return response.end();
   }
 

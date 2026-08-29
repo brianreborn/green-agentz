@@ -9,7 +9,7 @@ import { deliverPeek, peekSpecialist } from './handoff.mjs';
 import { consultNexus } from './nexus.mjs';
 import { planRoute } from './logical-router.mjs';
 import { proxyJson } from './proxy.mjs';
-import { aliasCanAdmit, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
+import { aliasCanAdmit, audioDataFromBody, detectModalities, hardRuleRoute, isRoutableAlias, latestUserMessageText, NATIVE_CHAT, stripSlashCommand } from './routing.mjs';
 import { headerSafe, jsonResponse, redact, secureEquals, stripControls } from './util.mjs';
 
 const EXPLICIT_ROUTES = new Set([
@@ -107,6 +107,39 @@ function wantsRoutePlan(body, pathname) {
 function isChatPath(pathname) {
   const path = String(pathname ?? '').replace(/\/route$/, '') || '/v1/chat/completions';
   return path === '/v1/chat/completions' || path.endsWith('/chat/completions');
+}
+
+function wrapNativeAsChat(alias, nativeJson) {
+  return {
+    id: `grz-native-${alias}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: alias,
+    choices: [{
+      index: 0,
+      message: { role: 'assistant', content: typeof nativeJson === 'string' ? nativeJson : JSON.stringify(nativeJson) },
+      finish_reason: 'stop',
+    }],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  };
+}
+
+function nativePayload(kind, body, alias) {
+  const text = latestUserMessageText(stripSlashCommand(body));
+  if (kind === 'embeddings') return { model: alias, input: text };
+  if (kind === 'rerank') {
+    const lines = String(text).split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      throw new ValidationError('/rerank needs a query line then one document per following line');
+    }
+    return { model: alias, query: lines[0], documents: lines.slice(1) };
+  }
+  if (kind === 'whisper') {
+    const audio = audioDataFromBody(body);
+    if (!audio) throw new ValidationError('/audio requires an attached audio part');
+    return { audio_data: audio };
+  }
+  return body;
 }
 
 export class Gateway {
@@ -319,6 +352,42 @@ export class Gateway {
     });
   }
 
+  async completeNativeChat(request, response, body, issuedSession, cors, hops, alias, native, reason) {
+    const availability = this.registry.status(alias);
+    if (!this.registry.agents.has(alias) || availability.state === 'unavailable') {
+      throw new UnavailableError(`${alias} is unavailable`, availability.missing);
+    }
+    const agent = this.registry.get(alias);
+    await this.processes.ensure(agent, { signal: request.abortSignal });
+    const payload = nativePayload(native.kind, body, alias);
+    const target = `http://127.0.0.1:${agent.port}${native.path}`;
+    const upstream = await this.fetchImpl(target, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', connection: 'close' },
+      body: JSON.stringify(payload),
+      signal: request.abortSignal,
+    });
+    const raw = typeof upstream.text === 'function'
+      ? await upstream.text()
+      : JSON.stringify(await upstream.json());
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { parsed = { raw }; }
+    this.observeHop('success', alias, { ticket: issuedSession, payload: { reason, hops: hops.slice() } });
+    this.sessions.setAgentAlias(issuedSession, alias);
+    const wrapped = wrapNativeAsChat(alias, parsed);
+    return jsonResponse(
+      response,
+      upstream.status >= 400 ? upstream.status : 200,
+      wrapped,
+      this.routeHeaders(
+        issuedSession,
+        { requestedAlias: body.model ?? null, effectiveAlias: alias, reason: reason ?? `native_${native.kind}` },
+        cors,
+        { hops: hops.join(',') },
+      ),
+    );
+  }
+
   routeHeaders(issuedSession, routed, cors, extra = {}) {
     return {
       'x-session-id': headerSafe(issuedSession),
@@ -508,6 +577,14 @@ export class Gateway {
         }
 
         if (!alias || visited.has(alias) || alias === NEXUS_ALIAS) break;
+        if (alias === 'speech-synthesis-agent') {
+          throw new ValidationError('/tts is not on /v1/chat/completions; speech-synthesis-agent has no persistent server');
+        }
+        const native = NATIVE_CHAT[alias];
+        if (native) {
+          hops.push(alias);
+          return await this.completeNativeChat(request, response, body, issuedSession, cors, hops, alias, native, reason);
+        }
         if (!isRoutableAlias(this.registry, alias) || !aliasCanAdmit(this.registry, alias, this.processes)) {
           visited.add(alias);
           hops.push(alias);

@@ -1,30 +1,18 @@
 # Known bugs (2026-08-28)
 
-Live on shalom `green-roomz serve` unless noted. Avoid with slash commands until prettify lands.
+Live on shalom `green-roomz serve` unless noted. Bounce serve after this landing.
 
-## Routing / nexus (open)
+## Routing / nexus
 
 - **Vision-first hop (mitigated).** Nexus AVAILABLE + `json_schema` omit `vision-layout-agent` / `audio-transcription-agent` unless that part is present. A live 0.5B that still emits vision is rejected and the **final** reason is returned (no `after:vision without image part`).
-  - Avoid: `/vision` without a real image part.
-
-- **Text-only image intent.** `draw a red apple` / `imagine a sunset` / `generate an image` now map to `image-generation-agent` via `offlinePlan`. A bare noun like “a red apple” still goes to general-text.
-  - On qodesh, `image-generation-agent` is unavailable (`sd-server.exe` missing) so chat falls through to an admittable specialist or the resident 0.5B.
-
-- **llama.app last-alias pin.** Client keeps sending `model=general-text-speculator`. `/auto` now unlocks pin and session (tested). A plain follow-up with no `/auto` after `/code` is not fully proven on the chat path.
-  - Avoid: `/auto` or an explicit slash each turn. `lock_alias: true` only when you mean lock.
-
-- **`/vision` with no image** slash-locks `vision-layout-agent`, then the specialist has nothing to see.
-  - Avoid: attach a real image part, or do not use `/vision`.
-
-- **`/embed` `/rerank` `/tts` `/audio` on `/v1/chat/completions`** likely 400 / wrong endpoint. Unverified live.
-  - Avoid: use their native routes (`/v1/embeddings`, `/v1/rerank`, audio/tts hosts) until chat-path is wired.
-
-- **`/router`** maps to `tool-router-agent`, which `routeIsBad` treats as not user-visible. May work on `/route` and fail on chat hops. Unverified.
-
-- **Mixed image + audio** still `ValidationError`.
-  - Avoid: one modality per turn, or an explicit qualified workflow.
-
-- **qodesh specialists.** 7B code is `impractical` on 16GB. `/code` no longer 503s: the gateway skips the missing specialist and answers on an admittable alias or the resident 0.5B nexus. Whisper/Piper/sd-server binaries are still missing.
+- **Text-only image intent.** `draw a red apple` / `imagine a sunset` / `generate an image` map to `image-generation-agent` via `offlinePlan`. A bare noun like “a red apple” still goes to general-text.
+- **llama.app last-alias pin.** Client `model=` is ignored unless `lock_alias: true`. A plain follow-up after `/code` consults nexus (tested). `/auto` also unlocks. `lock_alias: true` only when you mean lock.
+- **`/vision` / `/audio` without that part** → **400** (`/vision requires an attached image part`).
+- **`/embed` `/rerank` on chat** rewrite to `/v1/embeddings` and `/v1/rerank`, wrap the native JSON as a chat.completion. `/rerank` body: query line, then one document per line.
+- **`/tts` `/speak`** → **400**; piper has no persistent server.
+- **`/router`** pins the resident 0.5B (`slash_router`), does not hop as a user-visible specialist.
+- **Mixed image + audio** no longer `ValidationError`; both stay in nexus AVAILABLE unless `/vision` or `/audio` is explicit.
+- **qodesh specialists.** 7B code is `impractical` on 16GB. `/code` no longer 503s: skip to an admittable alias or the resident 0.5B. Whisper/Piper/sd-server binaries may still be missing.
 
 ## Escape / embed (partially patched on shalom)
 
@@ -32,9 +20,8 @@ Landed on shalom both trees: C0/C1/ESC/CRLF stripped from route reason/headers/h
 
 Still open:
 
-- Stream path can forward **raw SSE bytes** (ANSI / OSC 52 / CSI) to llama.app after the HANDOFF peek.
-- Client headers are still forwarded to llama-server except a small denylist.
-- JSON completions now strip C0/C1/ESC from `message.content` / `delta.content`.
+- JSON completions strip C0/C1/ESC from `message.content` / `delta.content`. Stream tails after HANDOFF peek are parsed and sanitized the same way (no raw SSE byte-forward).
+- Upstream hops allowlist `content-type` / `accept` / `idempotency-key` only.
 - Do not dump raw nexus/model text onto the qodesh `thinking.log` console without stripping ESC.
 
 ## Serve / ops
@@ -51,7 +38,7 @@ Still open:
 - **You do need `/image` (or `/imagine` `/draw`)** for *generating* a picture from text. Dropping an image is look-at-this (vision), not image-gen.
 - **llama.app / unicorn UI was not verified.** Many clients hide the attach/drop control unless the selected model is vision or audio. If drop is greyed or rejects types, switch with `/vision` or `/audio` first, then drop. That is a client limitation, not a gateway one.
 - Drop UI accept-list / disable-during-generate was **not patched** this session. If almost every file type still will not drop, it is still the client.
-- Mixed image+audio in one request still `ValidationError`.
+- Mixed image+audio in one request goes to nexus (both parts in AVAILABLE) unless `/vision` or `/audio` is explicit.
 - Unicorn script on shalom HTTP listing: `C:\LocalAI\green-unicorn.py` (unread this wrap).
 
 ## Working around routing today

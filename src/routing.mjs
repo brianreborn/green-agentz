@@ -40,6 +40,18 @@ export function latestUserMessageText(body) {
   return '';
 }
 
+export function audioDataFromBody(body) {
+  for (const message of body?.messages ?? []) {
+    if (!Array.isArray(message?.content)) continue;
+    for (const part of message.content) {
+      if (!part || typeof part !== 'object') continue;
+      const data = part.input_audio?.data ?? part.audio_url ?? part.audio;
+      if (typeof data === 'string' && data.toLowerCase().startsWith('data:audio/')) return data;
+    }
+  }
+  return null;
+}
+
 export function isExplicitTranslationRequest(body) {
   const text = (body?.messages ?? []).flatMap((message) => typeof message?.content === 'string' ? [message.content] : []).join('\n');
   return /\btranslate\b|\btranslation\b/i.test(text);
@@ -109,7 +121,7 @@ const SLASH_ALIASES = Object.freeze({
   chat: 'general-text-speculator',
   embed: 'semantic-embedding-agent',
   rerank: 'retrieval-rerank-agent',
-  router: 'tool-router-agent',
+  router: NEXUS_ALIAS,
   guard: 'safety-policy-agent',
   tts: 'speech-synthesis-agent',
   speak: 'speech-synthesis-agent',
@@ -117,6 +129,13 @@ const SLASH_ALIASES = Object.freeze({
   imagine: 'image-generation-agent',
   draw: 'image-generation-agent',
   auto: 'auto',
+});
+
+/** Chat-path aliases that must not be peeked as SSE /v1/chat/completions. */
+export const NATIVE_CHAT = Object.freeze({
+  'semantic-embedding-agent': { path: '/v1/embeddings', kind: 'embeddings' },
+  'retrieval-rerank-agent': { path: '/v1/rerank', kind: 'rerank' },
+  'audio-transcription-agent': { path: '/inference', kind: 'whisper' },
 });
 
 function latestUserCommandText(body) {
@@ -178,13 +197,29 @@ export function stripSlashCommand(body) {
 
 export function hardRuleRoute(body, registry) {
   const modality = detectModalities(body);
-  if (modality.image && modality.audio) throw new ValidationError('Mixed image and audio input requires an explicitly qualified workflow');
-  if (modality.audio) return finish(body, registry, 'audio-transcription-agent', 'audio_input', modality);
-  if (modality.image) return finish(body, registry, 'vision-layout-agent', 'image_input', modality);
   const slash = parseSlashCommand(body);
   if (slash?.token === 'auto') {
     return finish(body, registry, null, 'nexus', modality);
   }
+  if (slash?.token === 'router') {
+    return finish(body, registry, NEXUS_ALIAS, 'slash_router', modality);
+  }
+  if (slash?.token === 'vision' && !modality.image) {
+    throw new ValidationError('/vision requires an attached image part');
+  }
+  if (slash?.token === 'audio' && !modality.audio) {
+    throw new ValidationError('/audio requires an attached audio part');
+  }
+  if (slash?.token === 'tts' || slash?.token === 'speak') {
+    throw new ValidationError('/tts is not on /v1/chat/completions; speech-synthesis-agent has no persistent server');
+  }
+  if (modality.image && modality.audio) {
+    if (slash?.token === 'vision') return finish(body, registry, 'vision-layout-agent', 'slash_vision', modality);
+    if (slash?.token === 'audio') return finish(body, registry, 'audio-transcription-agent', 'slash_audio', modality);
+    return finish(body, registry, null, 'nexus', modality);
+  }
+  if (modality.audio) return finish(body, registry, 'audio-transcription-agent', 'audio_input', modality);
+  if (modality.image) return finish(body, registry, 'vision-layout-agent', 'image_input', modality);
   if (slash && slash.alias) {
     return finish(body, registry, slash.alias, `slash_${slash.token}`, modality);
   }

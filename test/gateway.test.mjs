@@ -580,3 +580,170 @@ test('/code on an impractical specialist falls back to resident 0.5B instead of 
   assert.equal(ensured.includes('qwenstral-code-speculator'), false);
   assert.equal(urls.every((url) => url.includes('18187')), true);
 });
+
+test('/embed on chat completions uses /v1/embeddings and wraps as chat', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['semantic-embedding-agent', 'tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      assert.equal(body.input, 'hello world');
+      return jsonFetch({ object: 'list', data: [{ embedding: [0.1, 0.2], index: 0 }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/embed hello world' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'semantic-embedding-agent');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'slash_embed');
+  assert.equal(urls.some((url) => url.includes('/v1/embeddings')), true);
+  assert.equal(urls.some((url) => url.includes('/v1/chat/completions')), false);
+  const wrapped = JSON.parse(result.body.choices[0].message.content);
+  assert.equal(wrapped.data[0].index, 0);
+});
+
+test('/rerank on chat completions uses /v1/rerank', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['retrieval-rerank-agent', 'tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      assert.equal(body.query, 'cats');
+      assert.deepEqual(body.documents, ['a cat sat', 'a dog ran']);
+      return jsonFetch({ results: [{ index: 0, relevance_score: 0.9 }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/rerank cats\na cat sat\na dog ran' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'retrieval-rerank-agent');
+  assert.equal(urls.some((url) => url.includes('/v1/rerank')), true);
+});
+
+test('/router on chat completions stays on the resident 0.5B', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['tool-router-agent', 'general-text-speculator'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'router-kernel' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { model: 'general-text-speculator', messages: [{ role: 'user', content: '/router ping' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'slash_router');
+  assert.equal(urls.every((url) => url.includes('18187')), true);
+});
+
+test('/vision without an image is 400', async (t) => {
+  const { server } = await withServer(t, {}, { stubEnsure: true, fetchImpl: async () => jsonFetch({ choices: [{ message: { content: 'no' } }] }) });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/vision what is this' }] },
+  });
+  assert.equal(result.status, 400);
+});
+
+test('/tts on chat completions is 400', async (t) => {
+  const { server } = await withServer(t, {}, { stubEnsure: true, fetchImpl: async () => jsonFetch({ choices: [{ message: { content: 'no' } }] }) });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/tts hello' }] },
+  });
+  assert.equal(result.status, 400);
+});
+
+test('plain follow-up after /code consults nexus instead of staying on code', async (t) => {
+  const urls = [];
+  const sessions = new SessionLedger();
+  const { server } = await withServer(t, {}, {
+    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    stubEnsure: true,
+    sessions,
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      if (String(url).includes(':18187')) {
+        return jsonFetch({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'general-text-speculator', confidence: 0.9, reason: 'default_text' }) } }],
+        });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'a limerick' } }] });
+    },
+  });
+  const first = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: '/code int main' }] },
+  });
+  assert.equal(first.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  const sid = first.headers['x-session-id'];
+  const second = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-session-id': sid },
+    body: {
+      model: 'qwenstral-code-speculator',
+      messages: [
+        { role: 'user', content: '/code int main' },
+        { role: 'assistant', content: 'int main() {}' },
+        { role: 'user', content: 'write a short limerick about rain' },
+      ],
+    },
+  });
+  assert.equal(second.status, 200);
+  assert.equal(second.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
+  assert.equal(urls.some((url) => url.includes(':18187')), true);
+});
+
+test('mixed image and audio on chat is not 400', async (t) => {
+  const { server } = await withServer(t, {}, {
+    ready: ['tool-router-agent', 'vision-layout-agent', 'audio-transcription-agent', 'general-text-speculator'],
+    stubEnsure: true,
+    fetchImpl: async (url) => {
+      if (String(url).includes(':18187')) {
+        return jsonFetch({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'vision-layout-agent', confidence: 0.8, reason: 'image_input' }) } }],
+        });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'saw-it' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,x' } },
+        { type: 'input_audio', input_audio: { data: 'data:audio/wav;base64,x' } },
+      ] }],
+    },
+  });
+  assert.notEqual(result.status, 400);
+  assert.notEqual(result.status, 500);
+  assert.equal(result.status, 200);
+});

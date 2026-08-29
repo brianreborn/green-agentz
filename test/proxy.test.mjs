@@ -58,7 +58,7 @@ test('content-length is not forwarded so a rewritten body can be larger', async 
     },
   });
   assert.equal(sent.get('content-length'), null);
-  assert.equal(sent.get('x-session-id'), 'abc');
+  assert.equal(sent.get('x-session-id'), null);
   assert.equal(sent.get('content-type'), 'application/json');
 });
 

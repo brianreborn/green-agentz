@@ -1,6 +1,7 @@
 # Fleet targets (workers)
 
 Job unless noted: **0.5B Q4**, short completion, thinking off.
+Artifact on disk: `Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` **432 MiB** / **593 M** params.
 `tok/W = tok/s / W_load`. `J/tok = W_load / tok/s`.
 `meas` = timed here. `est` = estimate from known class. `hyp` = silicon guess, **no shell yet**.
 Panel watts = display on (TVs/monitors dominate J/tok).
@@ -8,6 +9,8 @@ Panel watts = display on (TVs/monitors dominate J/tok).
 **Chart rule:** if we know enough SoC/RAM to guess 0.5B Q4 → put a **`hyp`** (or `est`) bar.
 **`0` / blank only** when we **cannot really guess** (no usable CPU story, or MCU with no GGUF path).
 Not “0 until shell” for every unshelled box — shell upgrades `hyp`→`meas`.
+
+**RAM gate:** need ~1 GB free userspace after OS to mmap 432 MiB + KV. hyp tok/s is **CPU-if-loaded**. Unknown modem/AP RAM that is typically <1 GB → treat as **conditional**; miss → 0 even if the CPU could run it.
 
 **Policy:** own-device exploit OK. Worker **alongside** system software.
 Operator names the box; this file holds SoCs / reset notes.
@@ -18,7 +21,9 @@ Charts list **every considered device**. Rejects = one line only (MCU-class stay
 
 **Reset column:** can we recover from a backup / stock ROM after a bad flash?
 
-Bar scale: tok/s 1#≈1; tok/W 1#≈0.25; J/tok 1#≈1 J. Width 40.
+Bar scale: tok/s 1#≈1; tok/W 1#≈0.25; J/tok 1#≈1 J. Width 40 (clip; shalom CPU 48 overflows).
+
+**Shalom 0.5B vs 4B/7B:** live GRZ nexus is CPU `--threads 2 --device none` so the APU stays free for 4B/7B. Fleet 0.5B number is a **dedicated worker** (full CPU), not that nexus. On 7520U the 2-CU 610M (no matrix cores) **loses** 0.5B generation to CPU.
 
 ---
 
@@ -35,15 +40,15 @@ Bar scale: tok/s 1#≈1; tok/W 1#≈0.25; J/tok 1#≈1 J. Width 40.
 ## tok/s
 
 ```
-pixel8      20–40 est   ########################################
-shalom      15–30 est   ##############################..........
+shalom      48    meas  ########################################   2026-08-29 CPU ngl0 tg8 (clip@40); Vulkan ngl99 tg8=8.4
+pixel8      20–40 est   ################################........
 note9        8–15 est   ###############.........................
-EN2251       4–10 hyp   ##########..............................   Puma7 dual Atom @2–2.5G if shelled
+EN2251       4–10 hyp   ##########..............................   Puma7 dual Atom if shelled AND ≥1GB free
 godslove     4–8  est   ########................................
 qodesh       3.0  meas  ###.....................................   2026-08-29 8-tok; was 2.5
-SAX2V1R      2–6  hyp   ######..................................   if IPQ-class A53s free; NSS≠GGUF
-QD65NF       2–6  est   ######..................................   55QD65NF Fire TV MT9602
-TU7000       1–4  hyp   ####....................................   Crystal UHD ARM, Tizen rooted
+SAX2V1R      2–6  hyp   ######..................................   AP CPU free; SoC ≠ SAX1 IPQ8072A
+QD65NF       2–6  est   ######..................................   MT9602 4×A53@1.5; SoC max 2GB
+TU7000       1–4  hyp   ####....................................   Crystal Processor 4K, Tizen 5.5
 E472VLE      0.2–1 hyp  #.......................................   2012 VIA; marginal for 0.5B
 K243Y        0    hyp   ........................................   scaler MCU — no GGUF
 IMW1202      0    hyp   ........................................   BT audio MCU
@@ -54,38 +59,73 @@ J3B          0    hyp   ........................................   BT headset/do
 ## tok/W
 
 ```
-pixel8      5–8         ################################
-note9       1.5–3       ############............................
-shalom      1.2–2.2     #########...............................
-EN2251      0.4–1.0 hyp ####....................................   ~8–12 W Atom-side guess
+pixel8      5–8     est ################################
+shalom      2.7–4.0 meas ############........................    48 tok/s / 12–18 W
+note9       1.5–3   est ############............................
+EN2251      0.4–1.0 hyp ####....................................   ~10–17 W Hitron wall
 SAX2V1R     0.2–0.6 hyp ##......................................   ~8–15 W AP load
-godslove    0.10–0.20   #.......................................
-qodesh      0.05–0.06   ........................................   ~55–65 W load assumed
-TU7000      0.01–0.04   ........................................   panel ~80–120 W on
-QD65NF      0.02–0.05   ........................................   panel on
-E472VLE     0.01–0.05   ........................................   old panel+SoC
+godslove    0.10–0.20 est #.......................................
+qodesh      0.05–0.06 meas ........................................   ~55–65 W load assumed
+TU7000      0.01–0.04 hyp ........................................   panel ~80–120 W on
+QD65NF      0.02–0.05 est ........................................   55" rated 125 W
+E472VLE     0.01–0.05 hyp ........................................   old panel+SoC
 K243Y / IMW1202 / CKS5TW / J3B   0  (cannot run 0.5B)
 ```
 
 ## J/tok
 
 ```
-pixel8      0.15–0.3    #.......................................
-note9       0.3–0.7     #.......................................
-shalom      0.5–0.8     #.......................................
+pixel8      0.15–0.3 est #.......................................
+shalom      0.25–0.4 meas #.......................................   12–18 W / 48 tok/s
+note9       0.3–0.7 est #.......................................
 EN2251      1–3   hyp   ###.....................................
 SAX2V1R     2–6   hyp   ######..................................
-godslove    5–12        ############............................
+godslove    5–12  est   ############............................
 qodesh      18–22 meas  ######################..................
 TU7000      25–100 hyp  ########################################   panel dominates
-QD65NF      25–80 est   ########################################
+QD65NF      25–80 est   ########################################   125 W / 2–6 tok
 E472VLE     40–200 hyp  ########################################
 K243Y / IMW1202 / CKS5TW / J3B   n/a (tok/s=0)
 ```
 
-**hyp basis (bottom rows):** EN2251 ≈ dual Atom class vs godslove/qodesh; SAX2 ≈ 2–4×A53 AP if main CPU freed (cousin SAX1 IPQ8072A is stronger — SAX2 Sercomm may be weaker, hence wide band); TU7000/QD65NF ≈ TV ARM + panel watts; E472 ≈ decade-old smart SoC; MCU rows = **0** on purpose (no userspace GGUF).
+**hyp / meas basis:** shalom CPU ngl0 llama-bench tg8 **48.1±1.9** (build 10665); same box Vulkan ngl99 tg8 **8.4** (Radeon 610M 2 CU, `matrix cores: none`) — keep Vulkan for 4B/7B, not 0.5B. EN2251 ≈ dual Atom vs godslove/qodesh **if RAM loads**; SAX2 ≈ 2–4×A53 if main CPU freed (cousin SAX1 IPQ8072A 4×A53@2.2 + 2 GB is stronger and **not** this SKU); TU7000/QD65NF ≈ TV ARM + panel watts; E472 ≈ decade-old smart SoC; MCU rows = **0** on purpose (no userspace GGUF).
 
 Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW, J3B (still charted at 0; keep as CE practice).
+
+---
+
+## Class / shell / RAM
+
+| id | class | shell now | RAM | 0.5B load? |
+|---|---|---|---|---|
+| **shalom** | live | GRZ | **16 GB** (15.3 GiB visible) | yes — **48 meas** CPU |
+| **qodesh** | live | GRZ | **16 GB** DDR3 | yes — **3.0 meas** CPU |
+| **godslove** | live OS | FreeBSD | **8 GB** | likely |
+| **pixel8** | userland | KernelSU | 8 GB class | likely; no 0.5B meas yet |
+| **note9** | userland | Magisk; ADB on shalom | **5.7 GB** (MemTotal 5710492 kB; ~3.0 GB avail) | **SM-N960U / SDM845 / Adreno 630** |
+| **QD65NF** | userland | ADB | SoC **max 2 GB** DDR3 | tight under Fire OS |
+| **TU7000** | userland | SDB | unpublished | unknown; 4-core Crystal 4K |
+| **SAX2V1R** | uart | none | unpublished (**≠** SAX1 2 GB) | unknown until silk |
+| **EN2251** | uart | none | unpublished; Hitron **modem** SKU | **gate** — Puma 7 modem boards often <1 GB |
+| **E472VLE** | uart | none | unpublished 2012 | marginal |
+| **K243Y / IMW / CKS / J3B** | ce | none | MCU | no |
+
+---
+
+## W_load assumptions (tok/W denominator)
+
+| id | W_load | basis |
+|---|---|---|
+| shalom | 12–18 | 7520U 15 W TDP; short 0.5B CPU, no extra panel in the worker number |
+| qodesh | 55–65 | Athlon II + 8600 GT wall (assumed; not metered) |
+| pixel8 | 4–6 | phone SoC load |
+| note9 | 5–8 | phone |
+| godslove | 25–40 | i7-620M 35 W TDP |
+| EN2251 | 10–17 | Hitron EN2251-RES max **16.93 W** |
+| SAX2V1R | 8–15 | 12 V AP class |
+| QD65NF | ~125 | Hisense 55" rated **125 W** (panel on) |
+| TU7000 | 80–120 | panel on, size-dependent |
+| E472VLE | 40–80 | old panel+SoC |
 
 ---
 
@@ -93,16 +133,16 @@ Rejected for not apparently very feasible as **workers**: K243Y, IMW1202, CKS5TW
 
 | id | hardware | OS | tok/s | reset / backup ROM | programmable |
 |---|---|---|---|---|---|
-| **qodesh** | Athlon II X2; 8600 GT; 16 GB | Win11 | **3.0 meas** (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ |
-| **shalom** | 7520U + RDNA2 | Win | 15–40 VK | N/A (PC; git) | live GRZ |
-| **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 | FreeBSD install media / ZFS bootenv if set | CPU then GL |
-| **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
-| **note9** | Exynos9810 or SDM845 | Android | 8–15 | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+GLES |
-| **QD65NF** | **55QD65NF** Costco Fire TV QLED; **MT9602** 4×A53 @ 1.5 GHz + Mali-G52 | **Fire TV** | **2–6 est** | **Partial** — Fire TV USB recovery / Amazon factory reset; Hisense USB update packages exist by SKU; not as clean as Pixel fastboot. Confirm exact recovery menu on unit. | **ADB easy; full root not.** Sideload/dev options = Fire TV normal. No public one-click Magisk for this Fire OEM SKU. Cousin: Hisense **Google/VIDAA** U8N MT9618 has XDA Magisk (UART+fastboot unlock) — different OS/SoC. Fire sticks/Cubes have exploits; **OEM Fire panels generally do not.** |
-| **SAX2V1R** | Sercomm IP6442B; FCC P27IP6442B; WiFi 6E. Cousin SAX1V1K=IPQ8072A+2GB+OpenWrt | Spectrum Linux | **2–6 hyp** | **Partial** — dual U-Boot slots on Askey cousins; dump eMMC before flash; stock Spectrum image hard to re-fetch (ISP). Dump first. | UART |
-| **TU7000** | Crystal 4K; Tizen 5.5 | Tizen | **1–4 hyp** | **Yes** — Samsung USB firmware / SmartThings / factory reset; Tizen recovery documented | SDB |
+| **shalom** | Ryzen 5 **7520U** 4C/8T Mendocino 15 W; Radeon **610M 2 CU** RDNA2 (no matrix); **16 GB**; Win11 Home | Win11 | **48 meas** CPU ngl0 tg8 (Vulkan tg8 **8.4**) | N/A (PC; git) | live GRZ |
+| **qodesh** | Athlon II X2; 8600 GT 224 MB sm_1.1; 16 GB DDR3 | Win11 | **3.0 meas** (was 2.5) | N/A (PC; git + GGUF on disk) | live GRZ |
+| **godslove** | i7-620M; Ironlake/NVS; 8 GB | PQFreeBSD 15 | 4–8 est | FreeBSD install media / ZFS bootenv if set | CPU then GL |
+| **pixel8** | Tensor G3; EdgeTPU | Android+KernelSU | 20–40 est | **Yes** — factory images / Android Flash Tool / fastboot | Termux/sidecar |
+| **note9** | **SM-N960U** `crownqltesq`; **SDM845**; Adreno 630 (GLES 3.2); 8× Kryo; **5.7 GB**; Android 10 / API 29; serial `27841130ae1c7ece` | Android 10 | 8–15 est | **Yes** — Odin/Heimdall stock + combo firmware widely mirrored | Termux+OpenCL/Vulkan |
+| **QD65NF** | **55QD65NF** Costco Fire TV QLED; **MT9602** 4×A53 @ 1.5 GHz + Mali-G52 2EE MC1; SoC **max 2 GB** DDR3; 55" rated **125 W** | **Fire TV** | **2–6 est** | **Partial** — Fire TV USB recovery / Amazon factory reset; Hisense USB update packages exist by SKU; not as clean as Pixel fastboot. Confirm exact recovery menu on unit. | **ADB easy; full root not.** Sideload/dev options = Fire TV normal. No public one-click Magisk for this Fire OEM SKU. Cousin: Hisense **Google/VIDAA** U8N MT9618 has XDA Magisk (UART+fastboot unlock) — different OS/SoC. Fire sticks/Cubes have exploits; **OEM Fire panels generally do not.** |
+| **SAX2V1R** | Sercomm **IP6442B**; FCC **P27IP6442B**; Spectrum SAX2V1R; Wi‑Fi 6E (PHY up to 4803.9 Mbps); 12 V. Cousin SAX1V1K = Askey IPQ8072A + 2 GB + OpenWrt — **different SoC, do not assume 2 GB** | Spectrum Linux | **2–6 hyp** | **Partial** — dual U-Boot slots on Askey cousins; dump eMMC before flash; stock Spectrum image hard to re-fetch (ISP). Dump first. | UART |
+| **TU7000** | 2020 Crystal UHD; **Crystal Processor 4K** (4 cores advertised); Tizen 5.5; Bishop Fox path demoed on **UN43TU700D** | Tizen | **1–4 hyp** | **Yes** — Samsung USB firmware / SmartThings / factory reset; Tizen recovery documented | SDB |
 | **E472VLE** | VIA 2012 | Yahoo widgets | **0.2–1 hyp** | **Weak** — USB `MERGE.bin`-style updates for some Vizio; 2012 VIA images scarce. Dump NAND/SPI before write. | UART |
-| **EN2251** | Puma 7 ≈ dual Atom 2–2.5 GHz + DOCSIS ARM | Spectrum | **4–10 hyp** | **Weak** — ISP config push; full stock ROM not user-hosted. Dump eMMC. | UART |
+| **EN2251** | Hitron **EN2251-RES** DOCSIS 3.1 **modem** (not gateway): 1×2.5GbE + voice; Intel **Puma 7** dual-core Atom + ARM MAC; 12 V 2 A, max **16.93 W**. Atom MHz/RAM **not** in public datasheet (many Puma 7 modem boards ~1.2 GHz / <1 GB — 2–2.5 GHz is a high-end guess) | Spectrum | **4–10 hyp** (0 if RAM gate) | **Weak** — ISP config push; full stock ROM not user-hosted. Dump eMMC. | UART |
 | **K243Y** | Acer FHD scaler MCU | OSD | **0 hyp** | Factory scaler dump only | UART silk |
 | **IMW1202** | HydraJolt 2.0 BT speaker; BT audio MCU | RTOS | **0 hyp** | Vendor OTA / SPI dump | CE practice |
 | **CKS5TW** | **ATH-CKS5TW** TWS; FCC **JFZCKS5TWR/L**; BT 5.0 aptX/AAC; Qualcomm audio path (aptX/cVc) | proprietary | **0 hyp** | Charging-case DFU / vendor app; dump each bud + case | CE practice pair |
@@ -135,7 +175,7 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 | id | best public surface | probable play | then |
 |---|---|---|---|
 | **SAX2V1R** | LAN web / Spectrum app / Wi‑Fi management SSID; WPS if on | Fingerprint Sercomm CGI / warehouse-style hidden pages (SAX1 cousins had hard-coded warehouse creds). Abuse ISP app pairing or local API. If stock already drops a root UART login after boot (cousin did), public path may be **none** — skip to UART. Soft: DHCP/hostname tricks rarely help on locked Spectrum builds. | Confirm SoC via FCC OpDesc; UART; if login shell exists → dump → OpenWrt port. Else eMMC CLK glitch → U-Boot (cousin SAX1V1R). |
-| **EN2251** | `192.168.100.1` modem UI; LAN; maybe Wi‑Fi if gateway SKU; SNMP/DOCSIS CM | Classic Puma/RDK: scrape UI for tech pages, password-of-the-day / hard-coded SSH (`arris`-class cousins), enable telnet/SSH from “support” CGI. CableTap-class: once on LAN as admin, hunt sysevent/DBus/UPnP for root cmd. Prefer **Atom (APP CPU)** — that’s the worker. | If UI locked by Spectrum: front-button / factory boot tricks (Hitron Puma cousin `nonpcpu`); then UART or eMMC reflash like DC30 Arris lab. Dump before write. |
+| **EN2251** | `192.168.100.1` modem UI; LAN; SNMP/DOCSIS CM (**no Wi‑Fi** — Hitron RES is modem+voice) | Classic Puma/RDK: scrape UI for tech pages, password-of-the-day / hard-coded SSH (`arris`-class cousins), enable telnet/SSH from “support” CGI. CableTap-class: once on LAN as admin, hunt sysevent/DBus/UPnP for root cmd. Prefer **Atom (APP CPU)** — that’s the worker. Read RAM before assuming 0.5B fits. | If UI locked by Spectrum: front-button / factory boot tricks (Hitron Puma cousin `nonpcpu`); then UART or eMMC reflash like DC30 Arris lab. Dump before write. |
 | **TU7000** | Samsung **developer mode** + **SDB** from a PC on LAN; SmartThings / DIY apps | Enable dev mode on TV (Apps → Settings → Developer → host IP). From that host: SDB install with malicious package **name** (Bishop Fox injection) → OS command as sdk → escalate per public writeups. Avoid random web RCE; SDB is the documented public interface. | Optional: older SamyGO USB/service if firmware old enough; else stay on volatile root / sideload. |
 | **QD65NF** | Fire TV **ADB** (dev options), sideload APKs, USB | Already the public door. For worker: Termux/userland llama first — no root required for weak 0.5B. For root: hunt FireOS build vs Stick/Cube temp-root (likely **won’t** match OEM panel). Next public: malicious/debuggable system app abuse, Amazon package update sideload, or local privilege bugs — low odds vs Stick scene. | Only then UART / eMMC (Hisense MT9602 service notes are mostly VIDAA, not Fire). |
 | **E472VLE** | Ethernet/Wi‑Fi if present; Yahoo widget “apps”; USB; IR service codes | 2012 stack: scan LAN for open HTTP/debug; widget/URL handlers often ran shell-adjacent. USB firmware / `MERGE.bin`-style update with unsigned or weakly signed image (era was soft). Hidden-network / service-menu command inject on later Vizios is a **cousin** pattern — try service remote codes first. | UART on mainboard if network dead; assume scarce stock ROM → dump SPI/NAND first. |
@@ -154,11 +194,11 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 
 | host | secondary | worker? |
 |---|---|---|
-| **EN2251** | Puma **dual Atom @ 2–2.5 GHz** | **Yes if shelled** |
-| **SAX/IPQ807x** | **2× NSS** packet cores | Offload Wi-Fi → A53 free for 0.5B |
+| **EN2251** | Puma **dual Atom** (MHz unpublished) | **Yes if shelled and RAM ≥1 GB** |
+| **SAX/IPQ807x** | **2× NSS** packet cores | Offload Wi-Fi → A53 free for 0.5B — **SAX1 cousin only** until SAX2 silk |
 | **pixel8** | EdgeTPU | TFLite sidecar |
 | **pixel8** | Titan M2 / modem | No GGUF |
-| **shalom** | RDNA2 | Primary 4B/7B |
+| **shalom** | 610M 2 CU RDNA2 | **4B/7B**, not 0.5B (CPU wins 0.5B gen) |
 | **qodesh** | 8600 GT shaders | Ancient |
 | **QD65NF** | Mali-G52 + T-Con | GLES maybe |
 | Storage | SSD R5/R8; **DVD/BD** drive MCU (MediaTek/ESS/Realtek — well-hacked firmware scene) | Stream/ripping DSP; not GGUF. DVD = practice + maybe stream decode assist |
@@ -168,7 +208,20 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 
 ---
 
-## Qodesh test status (this session)
+## Facts this pass (shalom, 2026-08-29)
+
+- **shalom** inventoried: 7520U 4C/8T @ 2.8 GHz base; 16 363 286 528 B RAM; AMD Radeon Graphics driver 32.0.21045.5002; Win11 Home 10.0.26200.
+- llama-bench build **10665** `tg8` / `pp32` on the 0.5B Q4: CPU ngl0 **tg 48.12±1.93**, pp 77; Vulkan ngl99 **tg 8.36±0.11**, pp 112. Backend reports `matrix cores: none`, UMA.
+- **EN2251** = Hitron EN2251-RES (modem+voice, not Wi-Fi gateway). Puma 7 dual-core Atom confirmed by Hitron/Intel 2015 CODA launch copy. Clock/RAM still unpublished.
+- **55QD65NF** SoC MT9602: 4×A53 @ 1.5 GHz, Mali-G52 2EE MC1, **max 2 GB** 48-bit DDR3 (MediaTek). 55" rated 125 W.
+- **SAX2V1R** FCC P27IP6442B / Sercomm IP6442B / 12 V / Wi-Fi 6E. OpenWrt has **SAX1V1K only** (IPQ8072A + 2 GB). Do not copy those specs onto SAX2.
+- Live GRZ on shalom still **degraded** (7B/4B impractical vs current free RAM); nexus :8187 resident.
+
+**Still confirm on the box:** J3B Jawbone vs JieLi; SAX2 SoC from FCC internals / UART; EN2251 Atom MHz + `free`; TU7000 exact size + RAM; QD65NF populated RAM vs 2 GB cap; pixel8 Termux 0.5B meas. **note9 SKU done** (SM-N960U SDM845).
+
+---
+
+## Qodesh test status (2026-08-29 snapshot)
 
 | gate | status |
 |---|---|
@@ -179,16 +232,73 @@ Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal 
 | `/code` via gateway | still needs live re-verify |
 | Local CI loop | **`scripts/local-ci-window.cmd`** detached, every 5 min → `data/local-ci.log` |
 | Visible console | `serve-window.cmd` / `local-ci-window.cmd` |
-| Git | local commits; develop further on **shalom** (faster) |
+| Git | develop on **shalom**; both trees at `origin/main` |
+
+---
+
+## Shalom test status (this host)
+
+| gate | status |
+|---|---|
+| Full suite | **191/191** pass (2026-08-29, routing slash/native/SSE) |
+| Serve live | `:8080` degraded (4B/7B RAM); nexus `:8187` 0.5B CPU-2-thread resident |
+| 0.5B worker meas | **48 tok/s** CPU ngl0 tg8; Vulkan tg8 **8.4** (do not use 610M for 0.5B) |
+| 4B / 7B | impractical right now (RAM: ~3 GB free + 2 GiB headroom) |
+| Git | `C:\Users\brian\Documents\green-roomz` = canonical |
+
+---
+
+## Phone pack (pre-build on shalom; do not push yet)
+
+Reuse existing Android cross-build, do not invent a third SDK:
+
+| piece | already on shalom | use for phones |
+|---|---|---|
+| SDK / adb | Japanglify `ANDROID_HOME=C:\Android\Sdk` (`bootstrap-android-sdk.sh`, Pixel 8 DUT) | licenses, platform-tools, `adb` |
+| Native pin | `llama.cpp-0.3.0/examples/llama.android` **NDK 29.0.13113456**, **CMake 3.31.6**, KleidiAI + `GGML_CPU_ALL_VARIANTS` | same NDK/CMake into that SDK |
+| llama.cpp source | `C:\LocalAI\llama.cpp-0.3.0` | CLI `llama-server` / `cli` / `bench` |
+| 0.5B Q4 | `C:\LocalAI\Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf` (432 MiB) | copy last, with the ELF |
+| Gateway | this repo, Node, no native addon | Termux `nodejs`; `--manifest config/agents.android.json` |
+
+**Yes, CPU pack can be built entirely on shalom.** One **arm64-v8a** ELF: `ANDROID_PLATFORM=android-28` (Note 9), `ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` (Pixel 8 16K). `scripts/android-cross-build.ps1` is **CPU-only today** (`GGML_VULKAN` / `GGML_OPENCL` off). KleidiAI + `GGML_CPU_ALL_VARIANTS` is the shared CPU path, not a GPU path.
+
+**GPU is not accommodated yet.** `GGML_BACKEND_DL=ON` is there so a later `ggml-vulkan.so` / `ggml-opencl.so` can load beside the same `llama-server`, but those .so files are not built. Pick the backend from the live SoC — not a guess:
+
+| phone | GPU if this SKU | llama.cpp backend to add |
+|---|---|---|
+| **note9 SM-N960U** | **Adreno 630** (live GLES: Qualcomm, OpenGL ES 3.2) | **OpenCL first** (llama.cpp Snapdragon recipe) and/or Vulkan. Not Mali. Hexagon HTP packs target newer SoCs — do not assume SDM845 DSP. |
+| **pixel8** Tensor G3 | Mali-G715 | Vulkan + KleidiAI CPU |
+
+Until `adb` can `getprop ro.hardware` / `dumpsys SurfaceFlinger`, do not turn on OpenCL (needs Khronos ICD in the NDK sysroot) or Vulkan (needs glslc + Android loader). Hexagon is Snapdragon-only and not for this Note 9 until the SKU is SDM.
+
+**Note 9 USB (shalom, 2026-08-29):** first lead was charge-only (no ADB). Data cable + Allow RSA → `27841130ae1c7ece` **SM-N960U** / SDM845 / Adreno 630 / Android 10 / 5.7 GB. Host key `brian@SHALOM` (`.android\adbkey` 2026-08-19).
+
+**Not in this pack yet:** GPU backends; llama.android **APK** (`minSdk 33` → Pixel 8 only, Note 9 is API 28); native sidecar (handshake stub only); 4B/7B GGUFs.
+
+Scripts: `scripts/android-sdk-ndk.ps1` then `scripts/android-cross-build.ps1` → `C:\LocalAI\android-pack\arm64-v8a`. On device: `GRZ_ROOT=... node bin/green-roomz.mjs serve --manifest config/agents.android.json`.
+
+**Gate — do not `adb push` / Termux copy until shalom *or* qodesh live agent is mostly working:**
+
+- [x] suite **191/191** on shalom
+- [x] live `/route`: `/vision` no-image **400**, `/tts` **400**, `/router` resident, `/code` slash_code, `/embed` slash_embed
+- [ ] live 8-tok completion via `:8080` on the resident 0.5B (not llama-bench)
+- [x] `/code` with impractical 7B → nexus, **not** 503 (unit + shalom RAM)
+- [x] NDK 29 + CMake 3.31.6 installed into Japanglify SDK
+- [ ] `android-cross-build.ps1` produces `llama-server` arm64 (configure reached Clang 20; last run cancelled before ninja)
+- [x] note9 ADB — **SM-N960U SDM845 Adreno 630** (was charge-only cable + RSA Allow)
+
+SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.
 
 ---
 
 ## Next
 
-1. Keep local-ci window alive on qodesh; read `data/local-ci.log`  
-2. Continue agent work on **shalom**  
-3. pixel8 / **55QD65NF** ADB  
-4. SAX2V1R UART / CLK-glitch; dump before flash  
-5. TU7000 SDB if developer mode OK  
+1. Finish shalom live agent gate (`curl.exe` `/route` + 8-tok) **before** any phone copy  
+2. Finish NDK/CMake install + `android-cross-build.ps1` on shalom  
+3. Then note9 Termux 0.5B — CPU pack first, **OpenCL/Vulkan Adreno 630** as the GPU add-on (not Mali)  
+4. SAX2V1R FCC internals / UART silk; dump before flash — **do not** flash SAX1 images  
+5. EN2251 `192.168.100.1` fingerprint only; read RAM before believing 4–10 tok/s  
+6. TU7000 SDB if developer mode OK  
+7. Keep qodesh `local-ci-window.cmd` alive  
 
-New device → row + all three charts + **reset** note. Update charts on every new `meas`.
+New device → row + all three charts + **reset** + RAM/class. Update charts on every new `meas`.

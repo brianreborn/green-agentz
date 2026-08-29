@@ -2,12 +2,13 @@ import { Readable } from 'node:stream';
 import { jitteredBackoff, sleep, stripEscapes } from './util.mjs';
 
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
+const UPSTREAM_HEADER_ALLOW = new Set(['content-type', 'accept', 'idempotency-key']);
 
-function upstreamHeaders(request) {
+export function upstreamHeaders(request) {
   const headers = new Headers();
-  for (const [key, value] of Object.entries(request.headers)) {
+  for (const [key, value] of Object.entries(request.headers ?? {})) {
     const lower = key.toLowerCase();
-    if (!value || HOP_BY_HOP.has(lower) || lower === 'authorization' || lower === 'host' || lower === 'content-length') continue;
+    if (!value || HOP_BY_HOP.has(lower) || !UPSTREAM_HEADER_ALLOW.has(lower)) continue;
     headers.set(key, Array.isArray(value) ? value.join(', ') : value);
   }
   headers.set('content-type', 'application/json');

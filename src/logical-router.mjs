@@ -26,7 +26,7 @@ export function planRoute(body) {
   const modality = detectModalities(body);
   const text = collectText(body);
   if (modality.image && modality.audio) {
-    return plan(null, 1, 'mixed_media_unsupported', ['image', 'audio']);
+    return plan(null, 1, 'mixed_media', ['image', 'audio']);
   }
   if (modality.audio) {
     return plan('audio-transcription-agent', 1, 'audio_input', ['audio']);
