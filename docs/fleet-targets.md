@@ -281,10 +281,10 @@ Scripts: `scripts/android-sdk-ndk.ps1` then `scripts/android-cross-build.ps1` �
 
 - [x] suite **191/191** on shalom
 - [x] live `/route`: `/vision` no-image **400**, `/tts` **400**, `/router` resident, `/code` slash_code, `/embed` slash_embed
-- [ ] live 8-tok completion via `:8080` on the resident 0.5B (not llama-bench)
-- [x] `/code` with impractical 7B → nexus, **not** 503 (unit + shalom RAM)
+- [x] live 8-tok via `:8080` lock_alias nexus **200** in 1.7s
+- [x] live `/code` with impractical 7B → **resident_fallback** 200 in 3.4s, not 503
 - [x] NDK 29 + CMake 3.31.6 installed into Japanglify SDK
-- [ ] `android-cross-build.ps1` produces `llama-server` arm64 (configure reached Clang 20; last run cancelled before ninja)
+- [x] `android-cross-build.ps1` → `C:\LocalAI\android-pack\arm64-v8a` **elf64 aarch64** `llama-server`/`cli`/`bench` + CPU KleidiAI `.so` variants (UI stub; cmake install of unused batched-bench skipped; copy bin/lib by hand)
 - [x] note9 ADB — **SM-N960U SDM845 Adreno 630** (was charge-only cable + RSA Allow)
 
 SKU confirmed: **Snapdragon, not Exynos.** GPU pack = OpenCL/Vulkan, not Mali.

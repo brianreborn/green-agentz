@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $Ndk 'build\cmake\android.toolchain.
 if (-not (Test-Path -LiteralPath $Cmake)) { throw "CMake $CmakeVer missing. Run scripts\android-sdk-ndk.ps1 first." }
 if (-not (Test-Path -LiteralPath (Join-Path $Src 'CMakeLists.txt'))) { throw "llama.cpp source missing: $Src" }
 
-if (Test-Path -LiteralPath $Build) { Remove-Item -LiteralPath $Build -Recurse -Force }
+# Keep object files across reconfigures (UI stub, flag tweaks).
 New-Item -ItemType Directory -Force -Path $Build, $Prefix | Out-Null
 
 $env:ANDROID_NDK = $Ndk
