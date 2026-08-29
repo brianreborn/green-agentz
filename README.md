@@ -20,6 +20,14 @@ is retained from the repository currently hosted as
 `brianreborn/green-agency`; `green-agency` remains a compatibility trigger
 during migration.
 
+## Architecture requirements
+
+- [Memory Feedback Loop](docs/memory-feedback-loop-requirements.md) defines the
+  six-phase cognitive memory lifecycle and its security boundaries.
+- [Security monitor component map](systems/green-roomz/docs/security-monitor-component-map.md)
+  makes the current Sentinel, Council, and Warden design surfaces visible while
+  Green-Shepherdz extraction remains under joint review.
+
 ## Host branches
 
 Host-specific launchers, manifests, measured profiles, and workarounds belong
