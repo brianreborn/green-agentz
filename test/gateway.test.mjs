@@ -441,6 +441,70 @@ test('impractical specialist is not started; completion stays on the resident ne
   assert.equal(urls.every((url) => url.includes('18187')), true);
 });
 
+test('nexus-picked cold specialist is not started; chat falls back to resident', async (t) => {
+  const urls = [];
+  const { server, processes } = await withServer(t, {}, {
+    ready: ['tool-router-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      if (String(body.messages?.[0]?.content ?? '').includes('AVAILABLE:')) {
+        return jsonFetch({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'general-text-speculator', confidence: 0.9, reason: 'chat' }) } }],
+        });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
+    },
+  });
+  const ensured = [];
+  const original = processes.ensure;
+  processes.ensure = async (agent) => {
+    ensured.push(agent.alias);
+    return original(agent);
+  };
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: 'hello there' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.headers['x-green-roomz-route-reason'], 'resident_fallback');
+  assert.equal(result.body.choices[0].message.content, 'resident-ok');
+  assert.equal(ensured.includes('general-text-speculator'), false);
+  assert.equal(urls.some((url) => url.includes(':18184')), false);
+});
+
+test('nexus-picked embed is not run as chat; falls back to resident', async (t) => {
+  const urls = [];
+  const { server } = await withServer(t, {}, {
+    ready: ['tool-router-agent', 'semantic-embedding-agent'],
+    stubEnsure: true,
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      const body = JSON.parse(Buffer.from(init.body).toString());
+      if (String(body.messages?.[0]?.content ?? '').includes('AVAILABLE:')) {
+        return jsonFetch({
+          choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'semantic-embedding-agent', confidence: 0.9, reason: 'oops' }) } }],
+        });
+      }
+      return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
+    },
+  });
+  const result = await request(server, {
+    path: '/v1/chat/completions',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: { messages: [{ role: 'user', content: 'Reply with exactly: OK' }] },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
+  assert.equal(result.body.choices[0].message.content, 'resident-ok');
+  assert.equal(urls.some((url) => url.includes('/v1/embeddings')), false);
+});
+
 test('observeHop posts mailbox and ipc; logger emit throw is swallowed', () => {
   const manifest = sampleManifest();
   const registry = new AgentRegistry(manifest);

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { FALLBACK_ALIAS, MONITOR_ALIAS, NEXUS_ALIAS, NEXUS_MAX_TOKENS } from './constants.mjs';
+import { FALLBACK_ALIAS, MONITOR_ALIAS, NEXUS_ALIAS, NEXUS_CONSULT_TIMEOUT_MS, NEXUS_MAX_TOKENS } from './constants.mjs';
 import { planRoute } from './logical-router.mjs';
 import { aliasCanAdmit, availableAliases, detectModalities, isRoutableAlias, latestUserMessageText, stripSlashCommand } from './routing.mjs';
 import { stripControls } from './util.mjs';
@@ -184,11 +184,13 @@ async function postNexus({ processes, registry, fetchImpl, body, visited, notes,
     },
   }, nexus);
   const target = `http://127.0.0.1:${nexus.port}/v1/chat/completions`;
+  const timed = AbortSignal.timeout(NEXUS_CONSULT_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timed]) : timed;
   const response = await fetchImpl(target, {
     method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify(payload),
-    signal,
+    signal: combined,
   });
   const raw = typeof response.text === 'function'
     ? await response.text()

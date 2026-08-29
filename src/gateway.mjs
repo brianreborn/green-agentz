@@ -580,8 +580,16 @@ export class Gateway {
         if (alias === 'speech-synthesis-agent') {
           throw new ValidationError('/tts is not on /v1/chat/completions; speech-synthesis-agent has no persistent server');
         }
+        const slashOrLock = Boolean(hard.effectiveAlias && hard.effectiveAlias === alias);
         const native = NATIVE_CHAT[alias];
         if (native) {
+          if (!slashOrLock) {
+            visited.add(alias);
+            hops.push(alias);
+            notes.push(stripControls(`${alias} skipped (not slash-selected)`));
+            this.observeHop('agent_unavailable', alias, { ticket: issuedSession, payload: { reason: 'native_not_selected', hops: hops.slice() } });
+            continue;
+          }
           hops.push(alias);
           return await this.completeNativeChat(request, response, body, issuedSession, cors, hops, alias, native, reason);
         }
@@ -594,9 +602,10 @@ export class Gateway {
         }
 
         // Nexus-picked cold specialists: do not mmap a 4B/7B and wedge --parallel 1.
-        // Slash/lock (first hop with a hard alias) may still cold-start.
+        // Only an explicit slash/lock targeting this alias may cold-start it.
         const alreadyReady = this.registry.status(alias).state === 'ready';
-        if (hops.length > 0 && !alreadyReady && alias !== NEXUS_ALIAS) {
+        const mayColdStart = slashOrLock;
+        if (!mayColdStart && !alreadyReady && alias !== NEXUS_ALIAS) {
           visited.add(alias);
           hops.push(alias);
           notes.push(stripControls(`${alias} cold; using resident`));
