@@ -113,6 +113,28 @@ Rejected for not apparently very feasible: *(none yet)*
 
 ---
 
+## Theorized best entry (public interfaces first)
+
+Own gear only. Theory, not a recipe — no payloads. Prefer interfaces a normal owner already has: LAN, Wi‑Fi, BT, USB, vendor app, ADB/SDB, IR. UART/eMMC is fallback after public path fails or for dump-before-flash.
+
+| id | best public surface | probable play | then |
+|---|---|---|---|
+| **SAX2V1R** | LAN web / Spectrum app / Wi‑Fi management SSID; WPS if on | Fingerprint Sercomm CGI / warehouse-style hidden pages (SAX1 cousins had hard-coded warehouse creds). Abuse ISP app pairing or local API. If stock already drops a root UART login after boot (cousin did), public path may be **none** — skip to UART. Soft: DHCP/hostname tricks rarely help on locked Spectrum builds. | Confirm SoC via FCC OpDesc; UART; if login shell exists → dump → OpenWrt port. Else eMMC CLK glitch → U-Boot (cousin SAX1V1R). |
+| **EN2251** | `192.168.100.1` modem UI; LAN; maybe Wi‑Fi if gateway SKU; SNMP/DOCSIS CM | Classic Puma/RDK: scrape UI for tech pages, password-of-the-day / hard-coded SSH (`arris`-class cousins), enable telnet/SSH from “support” CGI. CableTap-class: once on LAN as admin, hunt sysevent/DBus/UPnP for root cmd. Prefer **Atom (APP CPU)** — that’s the worker. | If UI locked by Spectrum: front-button / factory boot tricks (Hitron Puma cousin `nonpcpu`); then UART or eMMC reflash like DC30 Arris lab. Dump before write. |
+| **TU7000** | Samsung **developer mode** + **SDB** from a PC on LAN; SmartThings / DIY apps | Enable dev mode on TV (Apps → Settings → Developer → host IP). From that host: SDB install with malicious package **name** (Bishop Fox injection) → OS command as sdk → escalate per public writeups. Avoid random web RCE; SDB is the documented public interface. | Optional: older SamyGO USB/service if firmware old enough; else stay on volatile root / sideload. |
+| **QD65NF** | Fire TV **ADB** (dev options), sideload APKs, USB | Already the public door. For worker: Termux/userland llama first — no root required for weak 0.5B. For root: hunt FireOS build vs Stick/Cube temp-root (likely **won’t** match OEM panel). Next public: malicious/debuggable system app abuse, Amazon package update sideload, or local privilege bugs — low odds vs Stick scene. | Only then UART / eMMC (Hisense MT9602 service notes are mostly VIDAA, not Fire). |
+| **E472VLE** | Ethernet/Wi‑Fi if present; Yahoo widget “apps”; USB; IR service codes | 2012 stack: scan LAN for open HTTP/debug; widget/URL handlers often ran shell-adjacent. USB firmware / `MERGE.bin`-style update with unsigned or weakly signed image (era was soft). Hidden-network / service-menu command inject on later Vizios is a **cousin** pattern — try service remote codes first. | UART on mainboard if network dead; assume scarce stock ROM → dump SPI/NAND first. |
+| **K243Y** | **HDMI DDC/CI**; OSD buttons; any USB-C/service USB; factory IR if supported | Scalers sometimes expose DDC/CI vendor commands or I²C tunnels for firmware update. Public “interface” = PC with DDC tool / Monitor Asset Manager–class utilities, or vendor .bin over USB if Acer ships one. Exploit = malformed update or DDC write to flash if no sig check. | Silk UART next to scaler; bus pirate dump. Worker value near zero — practice only. |
+| **IMW1202** | Classic **Bluetooth** (A2DP/AVRCP/GATT); charge micro‑USB | Pair as speaker; enumerate GATT/RFCOMM. Look for vendor OTA characteristic or serial-over-BT used by “Altec” app. Unsigned OTA or path traversal in update = usual CE win. USB mass-storage / CDC if the charge port enumerates anything beyond charge. | SPI flash clip if BT OTA signed. Practice, not tok/s. |
+| **CKS5TW** | BT LE + classic; **charging case** USB; phone companion app | Case is often the DFU master: plug case USB → look for DFU/HID/Audio class. App OTA to case then buds. Qualcomm audio path → QACT/DFU-style interfaces on cousins. Best public bet: **case USB DFU** or app-captured OTA blob replay with patched image. | Dump buds + case separately; don’t brick both. |
+| **J3B** | BT and/or USB if it’s the Jawbone **dongle** form | If USB dongle: enumerate as sound card/HID — CSR/BlueCore cousins historically had DFU over USB. If headset: same as CKS5TW (case DFU + BT OTA). Confirm silk before assuming Jawbone vs generic JieLi TWS (JieLi has public flash tools). | Chip-off last. |
+
+**Skip (already accessible):** qodesh, shalom, godslove, pixel8, note9.
+
+**Order to try (public-first):** TU7000 SDB → QD65NF ADB userland → EN2251 `192.168.100.1` → SAX2 LAN/app fingerprint → E472 service/USB era tricks → BT CE toys (IMW/CKS/J3B) → K243Y DDC.
+
+---
+
 ## Secondary controllers (powerful misses)
 
 | host | secondary | worker? |
