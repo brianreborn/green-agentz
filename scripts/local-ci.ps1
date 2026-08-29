@@ -10,11 +10,16 @@ function Stamp { Get-Date -Format 'yyyy-MM-ddTHH:mm:ssK' }
 
 function Write-Log([string]$msg) {
   $line = "[{0}] {1}" -f (Stamp), $msg
-  Add-Content -Path $Log -Value $line
+  try { Add-Content -Path $Log -Value $line -Encoding utf8 } catch {}
   Write-Output $line
 }
 
-Write-Log "local-ci start pid=$PID interval=${IntervalSec}s"
+trap {
+  Write-Log ("TRAP: " + $_.Exception.Message)
+  continue
+}
+
+Write-Log "local-ci start pid=$PID interval=${IntervalSec}s ppid=$($PID)"
 Set-Location $Root
 
 while ($true) {
@@ -22,8 +27,15 @@ while ($true) {
   $outFile = Join-Path $Root 'data\local-ci-last.txt'
   $code = -1
   try {
-    & $Node --test .\test\*.test.mjs 2>&1 | Tee-Object -FilePath $outFile | Out-Null
-    $code = $LASTEXITCODE
+    # Avoid Tee-Object; expand glob ourselves (Start-Process won't).
+    $errFile = Join-Path $Root 'data\local-ci-node.err.txt'
+    $tests = @(Get-ChildItem -Path (Join-Path $Root 'test\*.test.mjs') | ForEach-Object { $_.FullName })
+    if ($tests.Count -eq 0) { throw 'no test\*.test.mjs files' }
+    $p = Start-Process -FilePath $Node -ArgumentList (@('--test') + $tests) `
+      -WorkingDirectory $Root -NoNewWindow -Wait -PassThru `
+      -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    $code = $p.ExitCode
+    if ($null -eq $code) { $code = -2 }
   } catch {
     Write-Log ("test-runner-exception: " + $_.Exception.Message)
     $code = 99
@@ -31,15 +43,10 @@ while ($true) {
   $tail = ''
   if (Test-Path $outFile) {
     $lines = Get-Content $outFile -ErrorAction SilentlyContinue
-    # node --test prints "# tests N" / "# pass N" / "# fail N" (ASCII) plus unicode marks
     $summary = $lines | Where-Object {
-      $_ -match '^# (tests|pass|fail|cancelled|skipped|todo|duration_ms)\b' -or
-      $_ -match '^(tests |pass |fail |duration_ms)' -or
-      $_ -match '[✖×].*fail'
-    } | Select-Object -Last 10
-    $passN = @($lines | Where-Object { $_ -match '^(\u2714|ok )' }).Count
-    $failN = @($lines | Where-Object { $_ -match '^(\u2718|✖|not ok )' }).Count
-    $tail = ("passmarks=$passN failmarks=$failN | " + ($summary -join ' | '))
+      $_ -match '^(# |ℹ )?(tests|pass|fail|cancelled|skipped|todo|duration_ms)\b'
+    } | Select-Object -Last 8
+    $tail = ($summary -join ' | ')
   }
   $elapsed = [int]((Get-Date) - $t0).TotalSeconds
   if ($code -eq 0) {
@@ -48,7 +55,6 @@ while ($true) {
     Write-Log "FAIL exit=$code ${elapsed}s $tail"
   }
 
-  # light health probe (non-fatal)
   try {
     $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/health' -TimeoutSec 3
     Write-Log ("health status=" + $h.status)
@@ -56,5 +62,7 @@ while ($true) {
     Write-Log 'health down'
   }
 
+  Write-Log "sleep ${IntervalSec}s"
   Start-Sleep -Seconds $IntervalSec
+  Write-Log 'wake'
 }
