@@ -22,11 +22,28 @@ during migration.
 
 ## Architecture requirements
 
+- [System overview](docs/architecture/system-overview.md) maps the Green-Agentz
+  ecosystem and the boundaries between Agentz, Roomz, Zkillz, Shepherdz, and
+  the future Fleetz integration surface.
+- [Memory and monitor architecture](docs/architecture/memory-and-monitor.md)
+  connects the osmotic memory-feedback loop to the protected Sentinel,
+  Council, and Warden monitor boundaries.
+- [Runtime request flow](docs/architecture/runtime-request-flow.md) follows a
+  request through capability discovery, routing, backend execution, receipts,
+  and failure handling.
+- [Fleet deployment](docs/architecture/fleet-deployment.md) describes host
+  overlays, branch responsibilities, deployment, and cross-host validation.
 - [Memory Feedback Loop](docs/memory-feedback-loop-requirements.md) defines the
   six-phase cognitive memory lifecycle and its security boundaries.
 - [Security monitor component map](systems/green-roomz/docs/security-monitor-component-map.md)
   makes the current Sentinel, Council, and Warden design surfaces visible while
   Green-Shepherdz extraction remains under joint review.
+- [Security monitor requirements](systems/green-roomz/docs/security-monitor-requirements.md)
+  records the normative requirements inherited by Green-Shepherdz.
+- [Security monitor audit](systems/green-roomz/docs/security-monitor-audit.md)
+  distinguishes implemented behavior from designs and open work.
+- [Open ecosystem work](docs/TODO.md) tracks deferred integration, including
+  the Green-Fleetz and swarm compatibility surface.
 
 ## Host branches
 
