@@ -45,6 +45,23 @@ during migration.
 - [Open ecosystem work](docs/TODO.md) tracks deferred integration, including
   the Green-Fleetz and swarm compatibility surface.
 
+## Subsystem entry points
+
+- [Green-Roomz](systems/green-roomz/README.md) is the executable local inference
+  gateway. Its [known bugs](systems/green-roomz/docs/known-bugs.md),
+  [fleet targets](systems/green-roomz/docs/fleet-targets.md), and
+  [Shalom deployment](systems/green-roomz/deploy/shalom/README.md) are tracked
+  beside the runtime.
+- [Green-Brainz](systems/green-brainz/README.md) stages the tested microkernel
+  components and their normative contracts: [IRQ](systems/green-brainz/irq/REQUIREMENTS.md),
+  [epigenetic memory](systems/green-brainz/memory/REQUIREMENTS.md), and
+  [objective scheduler](systems/green-brainz/scheduler/REQUIREMENTS.md).
+- [Green-Zkillz](docs/green-zkillz/README.md) documents the adaptive `/skill`
+  pipeline, including [installation](docs/green-zkillz/QUICK-INSTALL.md),
+  [requirements](docs/green-zkillz/REQUIREMENTS.md), and
+  [alpha release status](docs/green-zkillz/ALPHA.md). The installed capability
+  layout is indexed under [skills](skills/README.md).
+
 ## Host branches
 
 Host-specific launchers, manifests, measured profiles, and workarounds belong
