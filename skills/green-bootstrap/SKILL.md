@@ -1,6 +1,6 @@
 ---
 name: green-bootstrap
-description: Synthesize Makefile and runtime env files from a green-probe status array, enforce CI non-interactive logs, and proxy compiler output. Triggers include green-bootstrap, bootstrap the workspace, synthesize Makefile from probe, CI detection for green-agency, or compiler-output filter.
+description: Synthesize Makefile and runtime env files from a green-probe status array, enforce CI non-interactive logs, and proxy compiler output. Triggers include green-bootstrap, bootstrap the workspace, synthesize Makefile from probe, CI detection for green-zkillz, or compiler-output filter.
 metadata:
   type: workflow
   version: "1.0"
@@ -10,15 +10,15 @@ metadata:
 
 Requires a `STATUS` line from `green-probe`. If missing, run probe first.
 
-Route compiler/Make tails through `scripts/compiler-proxy.sh`, then intern exact diagnostics against `../green-agency/assets/gdict-errors-1.0.0.txt` (`gdict-static`) before anything reaches the model.
+Route compiler/Make tails through `scripts/compiler-proxy.sh`, then intern exact diagnostics against `../green-zkillz/assets/gdict-errors-1.0.0.txt` (`gdict-static`) before anything reaches the model.
 
 ## REQ-SK01-01 — Configuration synthesis
 
 Write only files justified by the probe:
 
-- `Makefile` — `probe`, `index`, `syntax`, `format`, `manuscript`, `check` targets that call the green-agency scripts. Do not add package managers or container pulls.
+- `Makefile` — `probe`, `index`, `syntax`, `format`, `manuscript`, `check` targets that call the green-zkillz scripts. Do not add package managers or container pulls.
 - `.env.green` — `GREEN_WORKSPACE`, `GREEN_HOST_TIER`, `GREEN_FS`, `GREEN_IDENTITY`. Never store secrets.
-- Use `green-agency/scripts/safe-write.sh` so existing files get a `.bak`.
+- Use `green-zkillz/scripts/safe-write.sh` so existing files get a `.bak`.
 
 Match bounds from the status array. If `fs=NONE` or `writable=false`, do not write files; print the proposed Makefile in chat instead.
 

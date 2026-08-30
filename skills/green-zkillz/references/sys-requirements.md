@@ -1,6 +1,7 @@
 # System-wide contracts (REQ-SYS-01..06)
 
-Canonical source: `brianreborn/green-agency` REQUIREMENTS.md.
+Canonical source: `brianreborn/green-agentz`
+`docs/green-zkillz/REQUIREMENTS.md`.
 
 ## REQ-SYS-01 — State engine and audit log
 

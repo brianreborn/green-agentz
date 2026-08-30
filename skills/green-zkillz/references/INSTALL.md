@@ -1,19 +1,19 @@
-# Install and test green-agency skills on another host
+# Install and test green-zkillz skills on another host
 
-Repo: https://github.com/brianreborn/green-agency
+Repo: https://github.com/brianreborn/green-agentz
 
 ## What you get
 
-Five-stage pipeline plus GDICT control-plane codec. Skills: probe, bootstrap, ingest, format, deploy, plus orchestrator `green-agency`.
+Five-stage pipeline plus GDICT control-plane codec. Skills: probe, bootstrap, ingest, format, deploy, plus orchestrator `green-zkillz`.
 
 Needs: bash, python3, sha256sum. No pip packages.
 
 ```bash
-git clone https://github.com/brianreborn/green-agency.git
+git clone https://github.com/brianreborn/green-agentz.git
 export GREEN_WORKSPACE="$PWD"
-export GDICT_STATIC="$PWD/skills/green-agency/assets"
-chmod +x skills/*/scripts/*.sh skills/green-agency/scripts/*.py
-# Point the host skill dir at skills/green-{probe,bootstrap,ingest,format,deploy,agency}
+export GDICT_STATIC="$PWD/skills/green-zkillz/assets"
+chmod +x skills/*/scripts/*.sh skills/green-zkillz/scripts/*.py
+# Point the host skill dir at skills/green-{zkillz,probe,bootstrap,ingest,format,deploy}
 ```
 
 Smoke: see this file in-repo for the /tmp/green-smoke block.
@@ -33,8 +33,8 @@ Private EXTREME store only. Not a public CDN. Token: `grokfile:<file_id>#<sha256
 ### 2. Enable in this project
 
 ```bash
-skills/green-agency/scripts/gdict-lru.sh usage-config ask
-skills/green-agency/scripts/gdict-lru.sh usage-config set grok_files=on
+skills/green-zkillz/scripts/gdict-lru.sh usage-config ask
+skills/green-zkillz/scripts/gdict-lru.sh usage-config set grok_files=on
 ```
 
 Local only (`$GREEN_WORKSPACE/.runtime/gdict-usage-config.json`, not git):

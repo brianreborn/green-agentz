@@ -4,8 +4,8 @@ Green-Agentz is the integration repository for the Green agent fleet.
 
 ## Project model
 
-- **Green-Agentz** is the project and top-level repository. It succeeds the
-  historical Green-Agency project name.
+- **Green-Agentz** is the project and top-level repository. **Green-Agency** is
+  its retired historical name and is not a separate project or runtime.
 - **Green-Zkillz** is the portable capability layer inside Green-Agentz. Its
   capabilities are applied to suitable agents through `/skill` commands; it is
   not a sibling daemon or independent runtime.
@@ -16,9 +16,9 @@ Green-Agentz is the integration repository for the Green agent fleet.
   extracted from the historical Green-Roomz location.
 
 The Green-Zkillz capability bundles live at `skills/`. Their imported history
-is retained from the repository currently hosted as
-`brianreborn/green-agency`; `green-agency` remains a compatibility trigger
-during migration.
+retains provenance from the former `brianreborn/green-agency` repository, but
+new documentation, triggers, paths, and releases use Green-Agentz or
+Green-Zkillz according to the project/capability distinction above.
 
 ## Architecture requirements
 

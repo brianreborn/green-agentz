@@ -1,4 +1,4 @@
-# Green Agency — Codec, repository, and usage addendum
+# Green-Zkillz — Codec, repository, and usage addendum
 
 Status: proposed + partial implementation (GDICT LRU/Bloom, usage ledger).
 Does not replace REQ-SYS-01..06. Human prose and comments are never encoded.

@@ -10,7 +10,7 @@ metadata:
 
 Do not publish without an explicit user request naming the channel (X, git/GitHub, or flat-file).
 
-Do not commit `$GREEN_WORKSPACE/.runtime/gdict-session.json` or usage JSONL. Ship only `../green-agency/assets/` static codebooks.
+Do not commit `$GREEN_WORKSPACE/.runtime/gdict-session.json` or usage JSONL. Ship only `../green-zkillz/assets/` static codebooks.
 
 ## REQ-SK04-01 — X dispatch
 

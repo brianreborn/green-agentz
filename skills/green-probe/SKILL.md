@@ -1,6 +1,6 @@
 ---
 name: green-probe
-description: Introspect host tier, file-descriptor privileges, and identity posture for the green-agency pipeline. Triggers include green-probe, probe the sandbox, host tier attestation, environment introspection, SuperGrok vs AGY sandbox check, or short-circuit probe cache refresh.
+description: Introspect host tier, file-descriptor privileges, and identity posture for the green-zkillz pipeline. Triggers include green-probe, probe the sandbox, host tier attestation, environment introspection, SuperGrok vs AGY sandbox check, or short-circuit probe cache refresh.
 metadata:
   type: workflow
   version: "1.0"
@@ -8,9 +8,9 @@ metadata:
 
 # Green Probe
 
-Run before any other green-agency skill.
+Run before any other green-zkillz skill.
 
-Encode the `STATUS` line with `gdict-static` from `../green-agency/assets/gdict-1.0.0.txt` (do not dump probe JSON into context). Record usage via `../green-agency/scripts/gdict-lru.sh record` when token counts are known.
+Encode the `STATUS` line with `gdict-static` from `../green-zkillz/assets/gdict-1.0.0.txt` (do not dump probe JSON into context). Record usage via `../green-zkillz/scripts/gdict-lru.sh record` when token counts are known.
 
 ## Procedure
 

@@ -19,4 +19,4 @@ Skills must run on a model that has never seen this repo.
 2. `$GREEN_WORKSPACE/.runtime/site.json` (see `SITE.example.json`)
 3. Ask once; do not invent an account
 
-`green-agency` in paths is a folder name for scripts/assets.
+`green-zkillz` in paths is a folder name for scripts/assets.

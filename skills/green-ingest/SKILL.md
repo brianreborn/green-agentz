@@ -1,6 +1,6 @@
 ---
 name: green-ingest
-description: Index a workspace tree or collect prose and code turn-by-turn, then run lightweight native syntax checks before assembly. Triggers include green-ingest, ingest the workspace, recursive directory index, interactive text ingestion, or syntax-validate sources for green-agency.
+description: Index a workspace tree or collect prose and code turn-by-turn, then run lightweight native syntax checks before assembly. Triggers include green-ingest, ingest the workspace, recursive directory index, interactive text ingestion, or syntax-validate sources for green-zkillz.
 metadata:
   type: workflow
   version: "1.0"
@@ -10,7 +10,7 @@ metadata:
 
 Choose the path from the latest probe `host_tier` / `fs` values.
 
-Do not dump recursive `find` listings into context. Index lines go through REQ-SYS-06 / GDICT (`../green-agency/assets/`). Prose and comments stay uncompressed.
+Do not dump recursive `find` listings into context. Index lines go through REQ-SYS-06 / GDICT (`../green-zkillz/assets/`). Prose and comments stay uncompressed.
 
 ## REQ-SK02-01 — Enhanced host (recursive index)
 

@@ -1,5 +1,9 @@
 Capability-layer name: **Green-Zkillz**
 
-Project name: **Green-Agentz**. The imported history still originates from
-`brianreborn/green-agency` until the GitHub repository migration is performed.
-Legacy trigger: `green-agency`. Stages: `green-probe` … `green-deploy`.
+Project name: **Green-Agentz**.
+
+**Green-Agency is retired.** It survives only in historical Git provenance and
+the former repository URL; it is not a supported trigger, package, directory,
+or alternate project identity.
+
+Stages: `green-probe` … `green-deploy`.

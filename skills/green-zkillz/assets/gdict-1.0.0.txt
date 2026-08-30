@@ -52,4 +52,4 @@ s01  skill green-bootstrap
 s02  skill green-ingest
 s03  skill green-format
 s04  skill green-deploy
-s05  skill green-agency
+s05  skill green-zkillz
