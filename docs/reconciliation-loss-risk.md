@@ -82,6 +82,10 @@ Current inventory:
 
 ### Unique or potentially unique authored material
 
+- Two requirements baselines totaling about 73 KB were recovered from the
+  2026-08-28 Codex output workspace after searches confirmed that neither
+  existed in any active Agentz or Roomz ref. They are now preserved under
+  [`docs/requirements/`](requirements/README.md) for semantic reconciliation.
 - `work/_reconcile-backup-2026-08-29/snapshot-2026-08-28-unique/` contains
   E3 probe/download scripts and several operations helpers not byte-identical
   to current Green-Agentz files.
@@ -104,6 +108,40 @@ The `green-agency-session.bundle` contains a commit not present in the current
 Green-Agentz object database, but that commit is also published in the private
 `brianreborn/green-agency-session-2026-08-26` repository. Its eventual public,
 private, or archival disposition remains open.
+
+### Other Shalom development trees
+
+`C:\Users\brian\Documents\green-roomz` is a separate current checkout with
+ignored cutover evidence and one untracked partial result. The newest unique
+records are `data/verify-cutover.json`, `verify-cutover.log`,
+`serve-cutover.log`, and `verify2.txt`. They document real 503, Vulkan OOM,
+timeout, and partial-probe outcomes. They are not production source, but their
+disposition as durable test evidence remains open.
+
+`C:\LocalAI` is a legacy deployment repository at local commit `d99e2d3` on
+`host/shalom-deployed-legacy`. That commit and its annotated archive tag are
+not on a recorded remote ref; a verified `localai.bundle` currently provides
+the recovery boundary. The resulting launcher source is already semantically
+present in Green-Agentz, but the ref and dropped-stash provenance must remain
+protected until archived deliberately.
+
+Strict source classification found 29 untracked authored or materially changed
+files (about 80 KB) in `C:\LocalAI` that are not byte- or EOL-equivalent to
+Green-Agentz. They fall into these review groups:
+
+- provisioning/download/finalization scripts;
+- Python gateway and model-switch prototypes;
+- Shalom network, firewall, share, and launch helpers;
+- Nexus routing probes and patch experiments under `_tmp`;
+- EAGLE3 probes and McAfee UI-automation helpers;
+- one materially modified `llama.cpp-0.3.0/tools/ui/CMakeLists.txt`, which must
+  be preserved as an attributed patch/delta rather than by vendoring the
+  upstream llama.cpp tree.
+
+The Android arm64 pack, llama build output, models, runtimes, downloads,
+virtual environments, caches, binaries, and unmodified upstream material are
+explicitly excluded even though they are locally large. They are reproducible
+or third-party payloads, not Green-Agentz source.
 
 ## Reconciliation gates
 

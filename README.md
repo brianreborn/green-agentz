@@ -22,6 +22,9 @@ Green-Zkillz according to the project/capability distinction above.
 
 ## Architecture requirements
 
+- [Recovered requirements baselines](docs/requirements/README.md) preserve two
+  substantive 2026-08-28 gateway specifications found outside all prior Git
+  refs and identify their status.
 - [System overview](docs/architecture/system-overview.md) maps the Green-Agentz
   ecosystem and the boundaries between Agentz, Roomz, Zkillz, Shepherdz, and
   the future Fleetz integration surface.
@@ -44,6 +47,13 @@ Green-Zkillz according to the project/capability distinction above.
   distinguishes implemented behavior from designs and open work.
 - [Open ecosystem work](docs/TODO.md) tracks deferred integration, including
   the Green-Fleetz and swarm compatibility surface.
+- [Lessons learned](docs/lessons-learned.md) records the repository, fleet, and
+  artifact-durability rules derived from the reconciliation incident.
+- [Development reconciliation ledger](docs/reconciliation-loss-risk.md) is the
+  active host-by-host checklist for ignored, untracked, and unpublished work.
+- [Version-control baseline requirements](docs/version-control-baseline-requirements.md)
+  define the candidate cross-project contract to be inherited through
+  Green-Zkillz.
 
 ## Subsystem entry points
 

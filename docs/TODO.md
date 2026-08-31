@@ -9,6 +9,10 @@
       ledger and its GitHub issue until it is landed or explicitly rejected.
 - [ ] Do not delete reconciliation backups merely because the canonical
       checkout is clean.
+- [ ] Turn the
+      [candidate version-control baseline](version-control-baseline-requirements.md)
+      into versioned manifest/receipt schemas and inherited Green-Zkillz
+      preflight checks after the reconciliation supplies complete cases.
 
 ## Ecosystem coordination
 
