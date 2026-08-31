@@ -1,5 +1,15 @@
 # Green-Agentz TODO
 
+## Development reconciliation
+
+- [ ] Complete the host-by-host ignored, untracked, unpublished-ref, and
+      external-tree audit in the
+      [development reconciliation and loss-risk ledger](reconciliation-loss-risk.md).
+- [ ] Keep every unresolved ignored or untracked authored artifact in that
+      ledger and its GitHub issue until it is landed or explicitly rejected.
+- [ ] Do not delete reconciliation backups merely because the canonical
+      checkout is clean.
+
 ## Ecosystem coordination
 
 - [ ] Define `green-fleetz` as the future host/fleet coordination layer beside
