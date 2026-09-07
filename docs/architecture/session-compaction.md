@@ -67,6 +67,101 @@ the window fills** (git, GitHub, `STATUS` / `PIPELINE` receipts,
 `.runtime/` cache). After compact, rehydrate from those artifacts. Do
 not trust the recap as the working set.
 
+## 0.1 How: fully integrate without a compact syscall
+
+We cannot `syscall` Grok Build auto-compact. Skills, MCP, and Brainz
+are not on that path. IRQ-5 is the same fact on llama: you cannot splice
+bytes into a decode already in flight. In-place compaction of a live
+context is not a Green primitive and must not be the plan.
+
+**Fully integrated** means MFL `impress()`: the item leaves *attention*
+and becomes an immutable Dreamcatcher record (`integration`). That is
+the opposite of keeping it in the Grok window. After impress, throwing
+the window away is not loss. Loss is only possible while state still
+lives only in attention (Grok turns, unimpressed admits).
+
+So the work is: **write-through the working set into Dreamcatcher faster
+than any host can fugue it.** Grok compact then becomes a cache miss.
+The compact syscall we *can* own is not Grok `/compact`. It is **start
+a new generation, possibly on a different model, with bounded recall of
+already-integrated keys.** Any sufficiently advanced agent that can
+choose a model and open an empty context already has that syscall.
+
+### Why model switch is the owned compact
+
+| Unowned (do not wait for) | Owned (implement) |
+|---|---|
+| Grok `/compact` / auto-compact | New session, new Roomz request, or different alias/weights |
+| Mutate llama KV / splice mid-decode | Preempt or end the generation; next fetch gets injected context (IRQ-5 / IRQ-8) |
+| Recap as origin | Wraparound: derived context, parent stays in the store, `originAgentHash` preserved |
+| Skills vetoing Grok compact | Skills impress receipts; host `tryPromote()` on `green-dreamz` |
+
+A model switch is always available once two inference surfaces exist
+(Grok vs Roomz, two Roomz aliases, raw-llama vs gateway, even one
+model with an empty prompt). The agent does not need the old model's
+permission. It needs the store to already hold the working set.
+
+Grok can remain the operator IDE. It must not remain the cognitive
+substrate. Switching "completely" means the loop that *admits* and
+*impresses* runs where we own generation leases (Roomz + Brainz). Grok
+fugue is then someone else's cache eviction.
+
+### Three layers, in order
+
+1. **Write-through (now, even on this Grok host).** Every fact that
+   must survive is impressed while it is still in attention: git,
+   GitHub, `STATUS`/`PIPELINE` receipts, and — when Brainz is called —
+   `MemoryFeedbackLoop.impress`. Treat the Grok window as a write-through
+   cache. This is what "record that" already did for the try-out
+   prompts. Operator markdown is not a substitute for Dreamcatcher, but
+   it is the only impress this host can do until an adapter calls
+   `remember()`.
+
+2. **Nap before the unowned compact (Brainz host).** Keep the MFL
+   attention budget **strictly smaller** than the model context window.
+   `admit` then naps (`fugue_prevented`) while Grok still has headroom.
+   Idle `tryPromote()` on `epigenetic-optimization` (`green-dreamz`)
+   impresses admitted keys. Dream is consolidation into the store, not
+   a summarizer. `goal`-tagged keys stay integrated through later
+   fridge/freezer/seizure.
+
+3. **Owned compact = new generation / model switch (Roomz).** After
+   impress, the host may drop the live prompt. Next request: Roomz asks
+   Agentz for bounded recall (already in
+   `docs/architecture/runtime-request-flow.md`); Roomz does not own the
+   records (MFL-1, MFL-17). Optional: switch alias or weights. That
+   reset is wraparound, not fugue. Public `:8080` still must not IRQ
+   (IRQ-9).
+
+### What the host loop looks like
+
+```text
+on event:
+  express → admit
+  if nap (working_set_full or stutter):
+      stop admitting
+      if idle: tryPromote(green-dreamz)  # impress admitted → integration
+      if still pressure: new generation and/or model switch
+          inject recallOrdinary(integrated) within token budget
+          do not inject partitioned/contained
+          do not send the old transcript as origin
+  never: wait for Grok auto-compact to "save" attention
+```
+
+`impress()` already removes the key from the MFL working set after the
+store has the record. That is success. The Grok window can vanish.
+
+### What we will not do
+
+- Teach Grok compact to be a dream cycle.
+- Store durable cognition in `~/.grok/memory` or in Roomz RAM admission
+  (`src/memory.mjs` is physical weights, not MFL).
+- Copy Brainz into Roomz. Import by `GREEN_BRAINZ_ROOT` (Roomz #10).
+- Pretend a recap is `integration`. It is an unauthenticated derived
+  document until something calls `remember()` on its payload.
+
+Follow-up work is Agentz #14. Roomz import remains Roomz #10 / Agentz #3.
+
 ## 1. Three windows people confuse
 
 | Window | Owner | What fills it | What "full" means | What recovery is |
