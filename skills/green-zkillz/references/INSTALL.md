@@ -13,7 +13,9 @@ git clone https://github.com/brianreborn/green-agentz.git
 export GREEN_WORKSPACE="$PWD"
 export GDICT_STATIC="$PWD/skills/green-zkillz/assets"
 chmod +x skills/*/scripts/*.sh skills/green-zkillz/scripts/*.py
-# Point the host skill dir at skills/green-{zkillz,probe,bootstrap,ingest,format,deploy}
+./scripts/green-zkillz/install-skills.sh
+# Windows: pwsh ./scripts/green-zkillz/install-skills.ps1
+# Points Grok at skills/ in this clone. Do not copy into green-roomz.
 ```
 
 Smoke: see this file in-repo for the /tmp/green-smoke block.

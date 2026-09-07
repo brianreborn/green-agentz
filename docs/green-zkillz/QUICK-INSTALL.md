@@ -8,12 +8,18 @@ export GDICT_STATIC="$PWD/skills/green-zkillz/assets"
 chmod +x skills/*/scripts/*.sh skills/green-zkillz/scripts/*.py
 ```
 
-Copy into the suitable agent's skill directory:
+Point the host at this clone (no copy into green-roomz or `~/.grok/skills`):
 
-`skills/green-zkillz` plus `green-probe`, `green-bootstrap`, `green-ingest`,
-`green-format`, and `green-deploy`.
+```bash
+./scripts/green-zkillz/install-skills.sh
+# Windows: pwsh .\scripts\green-zkillz\install-skills.ps1
+```
 
-Needs: bash, python3. No pip.
+Skills live at `skills/green-{zkillz,probe,bootstrap,ingest,format,deploy}`.
+Brainz (all of it) lives at `systems/green-brainz`. Set `GREEN_BRAINZ_ROOT`
+to that path if Roomz should import it.
+
+Needs: bash, python3, Node 22+ for Brainz tests. No pip.
 
 ```bash
 export GREEN_WORKSPACE=/tmp/green-smoke
