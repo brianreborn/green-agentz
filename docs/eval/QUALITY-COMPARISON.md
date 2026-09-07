@@ -612,6 +612,9 @@ J: five pairwise prompts, rubric 1–5 on correctness / refusal-honesty / format
 
 Default `node --test eval/quality/quality.test.mjs` is local, deterministic, no paid APIs. `EVAL_LIVE=1` hits `127.0.0.1:8080` or skips if down.
 
+Operator try-out (clone, install-skills.py, these commands as Grok prompts):
+[docs/green-zkillz/QUICK-INSTALL.md](../green-zkillz/QUICK-INSTALL.md).
+
 Cite: `gateway.mjs` `injectSystemPolicy`, `nexus.mjs` `buildNexusPrompt`/`parseRouteJson`, `handoff.mjs` `parseHandoffContent`, `routing.mjs` `hardRuleRoute`, `memory-feedback-loop.mjs` `observeAction`.
 
 **Acceptance:** in-process cases pass on Node 22 / Windows; live subset skip-clean without a gateway; no GGUFs committed; no PR into green-roomz.

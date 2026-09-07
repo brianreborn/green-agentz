@@ -2,7 +2,8 @@
 
 Adaptive skill pipeline within Green-Agentz.
 
-**Start here:** [QUICK-INSTALL.md](QUICK-INSTALL.md) · [NAME.md](NAME.md)
+**Start here:** [QUICK-INSTALL.md](QUICK-INSTALL.md) (clone + one Python
+command + example prompts) · [NAME.md](NAME.md)
 
 Canonical repository: `brianreborn/green-agentz`. Canonical requirements:
 [REQUIREMENTS.md](REQUIREMENTS.md).

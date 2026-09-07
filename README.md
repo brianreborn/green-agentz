@@ -31,6 +31,10 @@ Green-Zkillz according to the project/capability distinction above.
 - [Memory and monitor architecture](docs/architecture/memory-and-monitor.md)
   connects the osmotic memory-feedback loop to the protected Sentinel,
   Council, and Warden monitor boundaries.
+- [Session auto-compaction](docs/architecture/session-compaction.md)
+  describes how Grok host compact should compose with Zkillz receipts,
+  Dreamcatcher integration, and the MFL nap / fridge / freezer / seizure
+  ladder.
 - [Runtime request flow](docs/architecture/runtime-request-flow.md) follows a
   request through capability discovery, routing, backend execution, receipts,
   and failure handling.
@@ -67,10 +71,12 @@ Green-Zkillz according to the project/capability distinction above.
   [epigenetic memory](systems/green-brainz/memory/REQUIREMENTS.md), and
   [objective scheduler](systems/green-brainz/scheduler/REQUIREMENTS.md).
 - [Green-Zkillz](docs/green-zkillz/README.md) documents the adaptive `/skill`
-  pipeline, including [installation](docs/green-zkillz/QUICK-INSTALL.md),
+  pipeline, including [quick install and try-out prompts](docs/green-zkillz/QUICK-INSTALL.md),
   [requirements](docs/green-zkillz/REQUIREMENTS.md), and
   [alpha release status](docs/green-zkillz/ALPHA.md). The installed capability
-  layout is indexed under [skills](skills/README.md).
+  layout is indexed under [skills](skills/README.md). How Grok auto-compact
+  should treat those skills:
+  [session compaction](docs/architecture/session-compaction.md).
 
 ## Host branches
 

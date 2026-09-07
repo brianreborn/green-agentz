@@ -16,6 +16,10 @@ Green-Agentz
 The names describe ownership boundaries. They do not imply that every component
 is already a separate daemon or repository.
 
+Grok Build auto-compact of a host session is not Green-Brainz memory. How
+those layers should compose, including the zkillz skills:
+[session compaction](session-compaction.md).
+
 ## Ecosystem architecture
 
 ```mermaid
