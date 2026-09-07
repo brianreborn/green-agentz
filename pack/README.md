@@ -1,23 +1,18 @@
 # green-zkillz companion pack
 
-Filtered export of the **Green-Zkillz** skills and the full **Green-Brainz** tree from [brianreborn/green-agentz](https://github.com/brianreborn/green-agentz).
+Filtered export from [brianreborn/green-agentz](https://github.com/brianreborn/green-agentz).
+[green-roomz](https://github.com/brianreborn/green-roomz) is not in the archive.
 
-[green-roomz](https://github.com/brianreborn/green-roomz) is **not** in this pack. Do not copy pack paths into that repository.
+| Tree | Role |
+|---|---|
+| `skills/green-*` | Operator `/skill` pipeline (zkillz, probe, bootstrap, ingest, format, deploy) |
+| `systems/green-brainz` | IRQ, Dreamcatcher memory, cooperative scheduler |
 
-## Try it from a clone (preferred)
+Install and pack from this clone. Do not copy these paths into a green-roomz repository.
 
 ```text
-git clone https://github.com/brianreborn/green-agentz.git
-pwsh ./scripts/green-zkillz/install-skills.ps1
-# or: ./scripts/green-zkillz/install-skills.sh
+python scripts/green-zkillz/install-skills.py
+python scripts/green-zkillz/archive.py
 ```
 
-That points Grok at `skills/` in the clone. It does not duplicate files into `~/.grok/skills` or into green-roomz.
-
-Brainz stays at `systems/green-brainz`. Set `GREEN_BRAINZ_ROOT` to that directory if Roomz should import it. Tests: `node --test` in `irq/`, `memory/`, and `scheduler/`.
-
-## Zip (distribution only)
-
-Built with `scripts/green-zkillz/pack.ps1` / `pack.sh` via `git archive` of the paths in [MANIFEST.json](MANIFEST.json). Same files as this repo; not a second source tree.
-
-Version: [docs/green-zkillz/VERSION](../docs/green-zkillz/VERSION). Pipeline docs: [docs/green-zkillz](../docs/green-zkillz).
+Version is [docs/green-zkillz/VERSION](../docs/green-zkillz/VERSION). Path list is [MANIFEST.json](MANIFEST.json) `archive`. Pipeline docs: [docs/green-zkillz](../docs/green-zkillz).

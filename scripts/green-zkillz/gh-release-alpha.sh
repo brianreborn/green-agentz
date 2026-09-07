@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Cut or refresh a prerelease from the current checkout.
-# Attaches the filtered pack zip (skills + green-brainz). Requires: gh auth login
+# Cut or refresh a prerelease; attaches the filtered pack zip. Requires gh auth.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-TAG="${1:-green-zkillz-v$(tr -d '[:space:]' < docs/green-zkillz/VERSION)}"
+if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+TAG="${1:-green-zkillz-v$("$PY" -c "from pathlib import Path; print(Path('docs/green-zkillz/VERSION').read_text().strip())")}"
 NOTES="${2:-docs/green-zkillz/ALPHA.md}"
-ZIP="$(bash scripts/green-zkillz/pack.sh)"
-gh release view "$TAG" >/dev/null 2>&1 && MODE=edit || MODE=create
-if [ "$MODE" = create ]; then
-  gh release create "$TAG" --title "green-zkillz $TAG" --notes-file "$NOTES" --prerelease --generate-notes --target HEAD "$ZIP"
-else
+ZIP="$("$PY" scripts/green-zkillz/archive.py)"
+if gh release view "$TAG" >/dev/null 2>&1; then
   gh release edit "$TAG" --notes-file "$NOTES" --prerelease
   gh release upload "$TAG" "$ZIP" --clobber
+else
+  gh release create "$TAG" --title "green-zkillz $TAG" --notes-file "$NOTES" --prerelease --generate-notes --target HEAD "$ZIP"
 fi
-gh release view "$TAG" --web
+if [ -z "${CI:-}" ] && [ -t 1 ]; then
+  gh release view "$TAG" --web
+fi

@@ -24,10 +24,4 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           if [ "${{ github.event_name }}" = "push" ]; then TAG="${GITHUB_REF_NAME}"; fi
-          ZIP="$(bash scripts/green-zkillz/pack.sh)"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --notes-file docs/green-zkillz/ALPHA.md --prerelease
-            gh release upload "$TAG" "$ZIP" --clobber
-          else
-            gh release create "$TAG" --title "green-zkillz $TAG" --notes-file docs/green-zkillz/ALPHA.md --prerelease --generate-notes --target "${GITHUB_SHA}" "$ZIP"
-          fi
+          bash scripts/green-zkillz/gh-release-alpha.sh "$TAG"

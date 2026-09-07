@@ -5,21 +5,12 @@ git clone https://github.com/brianreborn/green-agentz.git
 cd green-agentz
 export GREEN_WORKSPACE="$PWD"
 export GDICT_STATIC="$PWD/skills/green-zkillz/assets"
-chmod +x skills/*/scripts/*.sh skills/green-zkillz/scripts/*.py
+python scripts/green-zkillz/install-skills.py
 ```
 
-Point the host at this clone (no copy into green-roomz or `~/.grok/skills`):
+Needs: Python 3.10+, bash or Git for Windows (skill scripts), Node 22+ for Brainz tests. No pip.
 
-```bash
-./scripts/green-zkillz/install-skills.sh
-# Windows: pwsh .\scripts\green-zkillz\install-skills.ps1
-```
-
-Skills live at `skills/green-{zkillz,probe,bootstrap,ingest,format,deploy}`.
-Brainz (all of it) lives at `systems/green-brainz`. Set `GREEN_BRAINZ_ROOT`
-to that path if Roomz should import it.
-
-Needs: bash, python3, Node 22+ for Brainz tests. No pip.
+Smoke:
 
 ```bash
 export GREEN_WORKSPACE=/tmp/green-smoke
@@ -28,5 +19,4 @@ skills/green-probe/scripts/probe.sh
 skills/green-zkillz/scripts/gdict-lru.sh usage compress
 ```
 
-Do not commit `.runtime/`.
-Full notes: skills/green-zkillz/references/INSTALL.md
+Do not commit `.runtime/`. Details: [skills/green-zkillz/references/INSTALL.md](../../skills/green-zkillz/references/INSTALL.md).

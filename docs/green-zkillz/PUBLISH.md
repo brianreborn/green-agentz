@@ -9,11 +9,7 @@ chmod +x scripts/green-zkillz/gh-release-alpha.sh
 # or: ./scripts/green-zkillz/gh-release-alpha.sh green-zkillz-v0.1.1-alpha
 ```
 
-No-script form:
-
-```bash
-gh release create green-zkillz-v0.1.0-alpha --title "green-zkillz 0.1.0-alpha" --notes-file docs/green-zkillz/ALPHA.md --prerelease --generate-notes
-```
+The script runs `archive.py` and attaches `dist/green-zkillz-<VERSION>.zip`. Do not `gh release create` without that zip.
 
 ## Actions (no laptop gh)
 

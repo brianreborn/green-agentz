@@ -1,51 +1,31 @@
 {
   "name": "green-zkillz",
-  "version_file": "docs/green-zkillz/VERSION",
-  "source": {
-    "repo": "https://github.com/brianreborn/green-agentz.git",
-    "note": "Canonical tree. Pack with scripts/green-zkillz/pack.sh from this repo. Do not copy these paths into brianreborn/green-roomz."
-  },
-  "roomz": {
-    "repo": "https://github.com/brianreborn/green-roomz.git",
-    "include": false
-  },
+  "source_repo": "https://github.com/brianreborn/green-agentz.git",
+  "roomz_repo": "https://github.com/brianreborn/green-roomz.git",
+  "roomz_include": false,
   "retired": ["green-agency"],
-  "components": [
-    {
-      "id": "skills",
-      "recommended": true,
-      "install": "point host skill discovery at skills/ in this clone; do not copy into green-roomz",
-      "paths": [
-        "skills/README.md",
-        "skills/green-zkillz",
-        "skills/green-probe",
-        "skills/green-bootstrap",
-        "skills/green-ingest",
-        "skills/green-format",
-        "skills/green-deploy"
-      ]
-    },
-    {
-      "id": "brainz",
-      "recommended": true,
-      "include": "all",
-      "install": "import systems/green-brainz from this clone (GREEN_BRAINZ_ROOT); do not vendor-copy into green-roomz",
-      "paths": ["systems/green-brainz"]
-    }
-  ],
-  "docs": [
+  "archive": [
+    "pack/MANIFEST.json",
+    "pack/README.md",
+    "skills/README.md",
+    "skills/green-zkillz",
+    "skills/green-probe",
+    "skills/green-bootstrap",
+    "skills/green-ingest",
+    "skills/green-format",
+    "skills/green-deploy",
+    "systems/green-brainz",
     "docs/green-zkillz",
     "docs/memory-feedback-loop-requirements.md",
     "docs/version-control-baseline-requirements.md",
     "docs/architecture/system-overview.md",
-    "docs/architecture/memory-and-monitor.md"
-  ],
-  "installers": [
-    "pack/MANIFEST.json",
-    "pack/README.md",
-    "scripts/green-zkillz/install-skills.ps1",
-    "scripts/green-zkillz/install-skills.sh",
+    "docs/architecture/memory-and-monitor.md",
+    "scripts/green-zkillz/archive.py",
+    "scripts/green-zkillz/install-skills.py",
+    "scripts/green-zkillz/gh-release-alpha.sh",
+    "scripts/green-zkillz/pack.sh",
     "scripts/green-zkillz/pack.ps1",
-    "scripts/green-zkillz/pack.sh"
+    "scripts/green-zkillz/install-skills.sh",
+    "scripts/green-zkillz/install-skills.ps1"
   ]
 }

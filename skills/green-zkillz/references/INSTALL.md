@@ -10,12 +10,10 @@ Needs: bash, python3, sha256sum. No pip packages.
 
 ```bash
 git clone https://github.com/brianreborn/green-agentz.git
+cd green-agentz
 export GREEN_WORKSPACE="$PWD"
 export GDICT_STATIC="$PWD/skills/green-zkillz/assets"
-chmod +x skills/*/scripts/*.sh skills/green-zkillz/scripts/*.py
-./scripts/green-zkillz/install-skills.sh
-# Windows: pwsh ./scripts/green-zkillz/install-skills.ps1
-# Points Grok at skills/ in this clone. Do not copy into green-roomz.
+python scripts/green-zkillz/install-skills.py
 ```
 
 Smoke: see this file in-repo for the /tmp/green-smoke block.
