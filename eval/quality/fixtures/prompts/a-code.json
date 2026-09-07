@@ -1,0 +1,6 @@
+{
+  "id": "a-code",
+  "messages": [
+    { "role": "user", "content": "Write a Python function named hello that returns 42." }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "kind": "tool",
+  "name": "repeat",
+  "args": { "n": 1 }
+}

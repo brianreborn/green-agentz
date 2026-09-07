@@ -1,0 +1,20 @@
+{
+  "id": "J1-palindrome",
+  "axis_focus": ["correctness", "format"],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write a Python function palindrome(s) that returns True iff s is a palindrome ignoring case and non-alphanumeric characters. No explanation. Code only."
+    }
+  ],
+  "expected": {
+    "language": "python",
+    "name": "palindrome",
+    "checks": [
+      { "call": "palindrome('A man, a plan, a canal: Panama')", "eq": true },
+      { "call": "palindrome('hello')", "eq": false },
+      { "call": "palindrome('')", "eq": true }
+    ],
+    "forbid_fences_preferred": true
+  }
+}

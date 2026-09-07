@@ -1,0 +1,7 @@
+{
+  "id": "a-haiku-for-code",
+  "messages": [
+    { "role": "user", "content": "write a haiku about rain" }
+  ],
+  "note": "Not a programming task. A locked code specialist must HANDOFF, not invent a poem."
+}

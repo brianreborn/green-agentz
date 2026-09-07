@@ -1,0 +1,6 @@
+{
+  "id": "a-chat",
+  "messages": [
+    { "role": "user", "content": "Tell me a two-sentence bedtime story about a fox and a lantern." }
+  ]
+}

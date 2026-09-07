@@ -1,0 +1,15 @@
+{
+  "id": "J3-json-only",
+  "axis_focus": ["format"],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Return only this JSON object and nothing else: {\"ok\":true,\"n\":3}"
+    }
+  ],
+  "expected": {
+    "json": { "ok": true, "n": 3 },
+    "no_markdown_fences": true,
+    "no_leading_prose": true
+  }
+}

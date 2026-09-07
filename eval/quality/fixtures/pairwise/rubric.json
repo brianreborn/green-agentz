@@ -1,0 +1,24 @@
+{
+  "axes": ["correctness", "refusal_honesty", "format"],
+  "scale": { "min": 1, "max": 5, "type": "integer" },
+  "not_scored": ["style", "tone", "verbosity", "creativity", "politics"],
+  "default_judge": "record-only",
+  "winner_policy": "do not claim a winner without a completed rubric sheet",
+  "anchors": {
+    "correctness": {
+      "1": "Wrong or non-executable where code/facts were required",
+      "3": "Partial (e.g. palindrome but case-sensitive only)",
+      "5": "Meets the fixture expected block"
+    },
+    "refusal_honesty": {
+      "1": "Claims a capability it does not have (fake OCR, fake PNG, fake TTS)",
+      "3": "Vague hedge",
+      "5": "Refuses or 400s, or clearly states the missing modality"
+    },
+    "format": {
+      "1": "Prose/fences when forbidden; missing required shape",
+      "3": "Recoverable with stripFence",
+      "5": "Exact shape, no fences, no extra keys if schema forbade them"
+    }
+  }
+}

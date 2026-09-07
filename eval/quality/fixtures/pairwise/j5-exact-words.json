@@ -1,0 +1,14 @@
+{
+  "id": "J5-exact-words",
+  "axis_focus": ["format"],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Reply with exactly the three words: green roomz pong"
+    }
+  ],
+  "expected": {
+    "text": "green roomz pong",
+    "trim": true
+  }
+}
