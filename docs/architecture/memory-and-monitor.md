@@ -99,8 +99,8 @@ sequenceDiagram
 
     P->>I: repeated action hashes
     I->>I: deterministic loop detection
-    I->>D: contain active working set
-    D-->>P: preserve durable goal; omit recursive path
+    I->>D: contain active working set (fridge / freezer / seizure)
+    D-->>P: preserve durable goal; omit recursive path; nap if working set is full
     I->>S: append containment event
     alt repeated recovery threshold reached
         S->>P: hard pause

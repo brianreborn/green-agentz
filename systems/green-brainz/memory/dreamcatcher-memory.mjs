@@ -67,9 +67,21 @@ function refFileName(branch) {
   return `${branch}.json`;
 }
 
-function buildRecord({ key, value, originatingAgentId, observedAt, salience, confidence, tags }) {
+function resolveOriginAgentHash({ originatingAgentId, originAgentHash }) {
+  if (originAgentHash) {
+    if (typeof originAgentHash !== 'string' || !/^[a-f0-9]{64}$/.test(originAgentHash)) {
+      throw new TypeError('originAgentHash must be 64 lowercase hex chars');
+    }
+    if (originatingAgentId && hashAgentId(originatingAgentId) !== originAgentHash) {
+      throw new Error('originAgentHash does not match originatingAgentId');
+    }
+    return originAgentHash;
+  }
+  return hashAgentId(originatingAgentId);
+}
+
+function buildRecord({ key, value, originatingAgentId, originAgentHash, observedAt, salience, confidence, tags }) {
   assertNonEmptyString(key, 'key');
-  assertNonEmptyString(originatingAgentId, 'originatingAgentId');
   assertNonEmptyString(observedAt, 'observedAt');
   assertUnitInterval(salience, 'salience');
   assertUnitInterval(confidence, 'confidence');
@@ -79,7 +91,7 @@ function buildRecord({ key, value, originatingAgentId, observedAt, salience, con
 
   // Validate serializability before calculating any digest.
   canonicalJson(value);
-  const originAgentHash = hashAgentId(originatingAgentId);
+  originAgentHash = resolveOriginAgentHash({ originatingAgentId, originAgentHash });
   const content = {
     schema: SCHEMA_VERSION,
     kind: 'memory',
@@ -259,6 +271,7 @@ export class DreamcatcherStore {
     key,
     value,
     originatingAgentId,
+    originAgentHash,
     writerAgentId = originatingAgentId,
     observedAt = this.clock(),
     salience = 1,
@@ -266,12 +279,15 @@ export class DreamcatcherStore {
     tags = [],
   }) {
     await this.init();
+    if (!writerAgentId) throw new TypeError('writerAgentId is required when originatingAgentId is omitted');
     const ref = await this.#readRef(branch);
     if (!ref) throw new Error(`branch does not exist: ${branch}`);
     const parent = ref.head ? await this.#getObject(ref.head) : null;
     if (parent && parent.kind !== 'memory-commit') throw new Error('branch head is not a memory commit');
 
-    const record = buildRecord({ key, value, originatingAgentId, observedAt, salience, confidence, tags });
+    const record = buildRecord({
+      key, value, originatingAgentId, originAgentHash, observedAt, salience, confidence, tags,
+    });
     const memoryHash = await this.#putObject(record);
     const root = await this.#setTrie(parent?.root ?? EMPTY_ROOT, keyPath(record.key), 0, record.key, memoryHash);
     const commit = {

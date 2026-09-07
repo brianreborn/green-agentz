@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test ./dreamcatcher-memory.test.mjs"
+    "test": "node --test ./dreamcatcher-memory.test.mjs ./memory-feedback-loop.test.mjs"
   },
   "engines": {
     "node": ">=22"
