@@ -160,7 +160,14 @@ store has the record. That is success. The Grok window can vanish.
 - Pretend a recap is `integration`. It is an unauthenticated derived
   document until something calls `remember()` on its payload.
 
-Follow-up work is Agentz #14. Roomz import remains Roomz #10 / Agentz #3.
+Implemented on Agentz `systems/green-brainz/host/cognitive-host.mjs`
+(`CognitiveHost.observeTurn` write-through impress, `dream()` /
+`tryPromote` on `green-dreamz`, `injectBoundedRecall`). Roomz loads it
+only when `GREEN_BRAINZ_ROOT` is set (`src/brainz.mjs`). Grok compact
+is still unowned fugue.
+
+Follow-up: Agentz #14 remaining host-watch of Grok's own window. Roomz
+#10 IRQ lease on every hop is started but not every proxy path.
 
 ## 1. Three windows people confuse
 

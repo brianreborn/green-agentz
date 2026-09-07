@@ -99,5 +99,15 @@ Do not commit `.runtime/`. Details:
 Optional pack zip (not required to try skills):
 `python scripts/green-zkillz/archive.py`.
 
+Live Roomz (`brianreborn/green-roomz`) imports Brainz by reference:
+
+```powershell
+$env:GREEN_BRAINZ_ROOT = "C:\Users\brian\Documents\green-agentz\systems\green-brainz"
+$env:GREEN_BRAINZ_STORE = "C:\Users\brian\Documents\green-roomz\data\dreamcatcher"
+node bin\green-roomz.mjs serve --host 127.0.0.1 --port 8080
+```
+
+Open `http://127.0.0.1:8080/` (HTTP, not https). `GET /` is an operator page; chat is `POST /v1/chat/completions`. Unset `GREEN_BRAINZ_ROOT` to skip cognitive memory.
+
 How Grok auto-compact should treat these skills:
 [session compaction](../architecture/session-compaction.md).
