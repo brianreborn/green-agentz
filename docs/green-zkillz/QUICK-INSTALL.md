@@ -109,5 +109,7 @@ node bin\green-roomz.mjs serve --host 127.0.0.1 --port 8080
 
 Open `http://127.0.0.1:8080/` (HTTP, not https). `GET /` is an operator page; chat is `POST /v1/chat/completions`. Unset `GREEN_BRAINZ_ROOT` to skip cognitive memory.
 
+UAT and automated e2e are both required to claim serve works — not domain `node --test` alone. In the Roomz checkout: `node scripts/uat.mjs` (live `:8080`) and `GRZ_E2E=1 npm run test:e2e` (isolated llama). See Roomz `docs/UAT.md`.
+
 How Grok auto-compact should treat these skills:
 [session compaction](../architecture/session-compaction.md).

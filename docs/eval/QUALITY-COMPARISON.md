@@ -615,6 +615,8 @@ Default `node --test eval/quality/quality.test.mjs` is local, deterministic, no 
 Operator try-out (clone, install-skills.py, these commands as Grok prompts):
 [docs/green-zkillz/QUICK-INSTALL.md](../green-zkillz/QUICK-INSTALL.md).
 
+Live UAT of the gateway testers actually hit, and isolated automated e2e, are both gates (not this in-process suite): Roomz [docs/UAT.md](../../systems/green-roomz/docs/UAT.md) in the live `green-roomz` repo. `EVAL_LIVE=1` here is the quality live subset, not operator UAT.
+
 Cite: `gateway.mjs` `injectSystemPolicy`, `nexus.mjs` `buildNexusPrompt`/`parseRouteJson`, `handoff.mjs` `parseHandoffContent`, `routing.mjs` `hardRuleRoute`, `memory-feedback-loop.mjs` `observeAction`.
 
 **Acceptance:** in-process cases pass on Node 22 / Windows; live subset skip-clean without a gateway; no GGUFs committed; no PR into green-roomz.
