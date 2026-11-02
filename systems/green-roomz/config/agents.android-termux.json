@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "manifest_version": "0.1.0-note9-arm64",
+  "manifest_version": "0.1.0-android-legacy-arm64",
   "product": "Green-Roomz",
   "gateway": {
     "host": "127.0.0.1",
