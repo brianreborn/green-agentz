@@ -1,6 +1,6 @@
 # Known bugs (2026-08-28)
 
-Live on shalom `green-roomz serve` unless noted. Bounce serve after this landing.
+Live on win-host `green-roomz serve` unless noted. Bounce serve after this landing.
 
 ## Routing / nexus
 
@@ -12,25 +12,25 @@ Live on shalom `green-roomz serve` unless noted. Bounce serve after this landing
 - **`/tts` `/speak`** → **400**; piper has no persistent server.
 - **`/router`** pins the resident 0.5B (`slash_router`), does not hop as a user-visible specialist.
 - **Mixed image + audio** no longer `ValidationError`; both stay in nexus AVAILABLE unless `/vision` or `/audio` is explicit.
-- **qodesh specialists.** 7B code is `impractical` on 16GB. `/code` no longer 503s: skip to an admittable alias or the resident 0.5B. Whisper/Piper/sd-server binaries may still be missing.
+- **mvp-host specialists.** 7B code is `impractical` on 16GB. `/code` no longer 503s: skip to an admittable alias or the resident 0.5B. Whisper/Piper/sd-server binaries may still be missing.
 
-## Escape / embed (partially patched on shalom)
+## Escape / embed (partially patched on win-host)
 
-Landed on shalom both trees: C0/C1/ESC/CRLF stripped from route reason/headers/hop notes; route + HANDOFF `suggest` allowlisted; USER fenced so it cannot spoof AVAILABLE/HANDOFF; first `{...}` JSON only; slash ignored inside fences.
+Landed on win-host both trees: C0/C1/ESC/CRLF stripped from route reason/headers/hop notes; route + HANDOFF `suggest` allowlisted; USER fenced so it cannot spoof AVAILABLE/HANDOFF; first `{...}` JSON only; slash ignored inside fences.
 
 Still open:
 
 - JSON completions strip C0/C1/ESC from `message.content` / `delta.content`. Stream tails after HANDOFF peek are parsed and sanitized the same way (no raw SSE byte-forward).
 - Upstream hops allowlist `content-type` / `accept` / `idempotency-key` only.
-- Do not dump raw nexus/model text onto the qodesh `thinking.log` console without stripping ESC.
+- Do not dump raw nexus/model text onto the mvp-host `thinking.log` console without stripping ESC.
 
 ## Serve / ops
 
-- qodesh `:8080` is **degraded** without Qwen3-4B; nexus `:8187` 0.5B CPU-only is the working piece.
-- HTTP `192.168.1.251:8765` must stay bound to LAN (not 127.0.0.1). Duplicate python listeners caused 404/335-byte fake GGUFs.
+- mvp-host `:8080` is **degraded** without Qwen3-4B; nexus `:8187` 0.5B CPU-only is the working piece.
+- HTTP `192.0.2.10:<PORT>` must stay bound to LAN (not 127.0.0.1). Duplicate python listeners caused 404/335-byte fake GGUFs.
 - Grok Bot local-exec on both PCs can drop mid-command; reconnect and continue. Do not Shell two `machineId`s in one parent turn.
-- McAfee on shalom: no Add-Type/P/Invoke; long PowerShell here-strings abort; do not disable RTS.
-- **Note 9 Termux cannot exec `/data/local/tmp`.** SELinux `untrusted_app`. Copy llama pack to `~/grz-runtime`. `/sdcard` is noexec; needs `termux-setup-storage` to read `Download/`.
+- McAfee on win-host: no Add-Type/P/Invoke; long PowerShell here-strings abort; do not disable RTS.
+- **Android-legacy phone Termux cannot exec `/data/local/tmp`.** SELinux `untrusted_app`. Copy llama pack to `~/grz-runtime`. `/sdcard` is noexec; needs `termux-setup-storage` to read `Download/`.
 - **Phone RAM headroom.** 2 GiB floor blocked 0.5B nexus on ~3 GiB free. `headroomBytes()` is 256 MiB when `totalmem < 8 GiB`.
 - CUDA 6.5 installer is **on disk only** (`C:\LocalAI\_tmp\cuda_6.5.19_windows_general_64.exe`, md5 `63575eee9cb5cbf3e84f9c4496060399`). Do not run it on Win11/8600 (driver risk). 224MB VRAM cannot hold 0.5B Q4.
 
@@ -41,7 +41,7 @@ Still open:
 - **llama.app / unicorn UI was not verified.** Many clients hide the attach/drop control unless the selected model is vision or audio. If drop is greyed or rejects types, switch with `/vision` or `/audio` first, then drop. That is a client limitation, not a gateway one.
 - Drop UI accept-list / disable-during-generate was **not patched** this session. If almost every file type still will not drop, it is still the client.
 - Mixed image+audio in one request goes to nexus (both parts in AVAILABLE) unless `/vision` or `/audio` is explicit.
-- Unicorn script on shalom HTTP listing: `C:\LocalAI\green-unicorn.py` (unread this wrap).
+- Unicorn script on win-host HTTP listing: `C:\LocalAI\green-unicorn.py` (unread this wrap).
 
 ## Working around routing today
 
