@@ -10,9 +10,15 @@ data/local-ci-last.txt
 data/serve*
 data/ram-watch*
 data/open-taskmgr.ps1
-data/shalom-ram-watch.ps1
+data/*-ram-watch.ps1
 data/*.stdout.log
 data/*.note.txt
 *.gguf
 .DS_Store
 Thumbs.db
+
+# Private per-host overrides (issue #28): never commit; see *.example
+local.env
+hosts.local.json
+private.env
+privacy-hosts.local.txt

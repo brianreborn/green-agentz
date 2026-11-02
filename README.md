@@ -64,7 +64,7 @@ Green-Zkillz according to the project/capability distinction above.
 - [Green-Roomz](systems/green-roomz/README.md) is the executable local inference
   gateway. Its [known bugs](systems/green-roomz/docs/known-bugs.md),
   [fleet targets](systems/green-roomz/docs/fleet-targets.md), and
-  [Shalom deployment](systems/green-roomz/deploy/shalom/README.md) are tracked
+  [Windows host deployment](systems/green-roomz/deploy/win-host/README.md) are tracked
   beside the runtime.
 - [Green-Brainz](systems/green-brainz/README.md) stages the tested microkernel
   components and their normative contracts: [IRQ](systems/green-brainz/irq/REQUIREMENTS.md),
