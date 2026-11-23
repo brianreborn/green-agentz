@@ -46,7 +46,7 @@ test('inspect keeps a memory-tight specialist available (OS pages), not unavaila
   try {
     const manifest = sampleManifest();
     manifest.runtimes.llama_server.command = process.execPath;
-    const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+    const agent = manifest.agents.find((item) => item.alias === 'code-generation-agent');
     agent.model = model;
     agent.draft_enabled = false;
     agent.profiles = [
@@ -56,7 +56,7 @@ test('inspect keeps a memory-tight specialist available (OS pages), not unavaila
     const registry = await new AgentRegistry(manifest).inspect({
       hostAdapter: { sampleResources() { return { freeMemoryBytes: 1 }; } },
     });
-    const status = registry.status('qwenstral-code-speculator');
+    const status = registry.status('code-generation-agent');
     assert.notEqual(status.state, 'unavailable', 'tight RAM must not make it unavailable');
     assert.ok(!(status.missing ?? []).some((reason) => String(reason).startsWith('impractical')));
   } finally {

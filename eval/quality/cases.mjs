@@ -48,7 +48,7 @@ const COMPILE_PROMPT = fileURLToPath(new URL('../../systems/green-roomz/src/comp
 const ALIASES = [
   'vision-layout-agent',
   'audio-transcription-agent',
-  'qwenstral-code-speculator',
+  'code-generation-agent',
   'general-text-speculator',
   'semantic-embedding-agent',
   'retrieval-rerank-agent',
@@ -149,12 +149,12 @@ export const CASES = [
     id: 'A-code-intent-plan',
     dimension: 'A',
     mode: 'in-process',
-    title: 'planRoute sends code intent to qwenstral-code-speculator',
+    title: 'planRoute sends code intent to code-generation-agent',
     async run() {
       const body = loadJson('prompts/a-code.json');
       const plan = planRoute(body);
       return allPass([
-        check('route', plan.route === 'qwenstral-code-speculator', plan.route),
+        check('route', plan.route === 'code-generation-agent', plan.route),
         check('reason', plan.reason_code === 'code_intent', plan.reason_code),
       ], 'code_intent', 'not code route');
     },
@@ -263,12 +263,12 @@ export const CASES = [
     mode: 'in-process',
     title: 'unavailable/impractical alias is not a route',
     async run() {
-      const registry = stubRegistry({ unavailable: ['qwenstral-code-speculator'] });
+      const registry = stubRegistry({ unavailable: ['code-generation-agent'] });
       const body = loadJson('prompts/a-code.json');
       const plan = offlinePlan(body, registry, new Set());
       return allPass([
-        check('not_routable', isRoutableAlias(registry, 'qwenstral-code-speculator') === false, 'still routable'),
-        check('not_code', plan.route !== 'qwenstral-code-speculator', plan.route),
+        check('not_routable', isRoutableAlias(registry, 'code-generation-agent') === false, 'still routable'),
+        check('not_code', plan.route !== 'code-generation-agent', plan.route),
         check('fallback', plan.route === 'general-text-speculator', `${plan.route} ${plan.reason}`),
       ], plan.reason ?? 'fallback', 'unavailable code alias was chosen');
     },
@@ -311,7 +311,7 @@ export const CASES = [
         return skip('compile-prompt.mjs not in this tree; injectSystemPolicy uses raw kernel');
       }
       const mod = await import(pathToFileURL(COMPILE_PROMPT).href);
-      const code = mod.stockPromptLayers('qwenstral-code-speculator');
+      const code = mod.stockPromptLayers('code-generation-agent');
       const nexus = mod.stockPromptLayers('tool-router-agent');
       return allPass([
         check('code_handoff', code.includes('handoff'), code.join(',')),
@@ -343,12 +343,12 @@ export const CASES = [
     title: 'lock_alias pins the requested specialist',
     async run() {
       const routed = hardRuleRoute({
-        model: 'qwenstral-code-speculator',
+        model: 'code-generation-agent',
         lock_alias: true,
         messages: [{ role: 'user', content: 'tell me a joke' }],
       }, stubRegistry());
       return allPass([
-        check('alias', routed.effectiveAlias === 'qwenstral-code-speculator', routed.effectiveAlias),
+        check('alias', routed.effectiveAlias === 'code-generation-agent', routed.effectiveAlias),
         check('reason', routed.reason === 'lock_alias', routed.reason),
       ], 'lock_alias', 'pin ignored');
     },
@@ -504,7 +504,7 @@ export const CASES = [
       const spoof = loadText('injection/spoof-available.txt');
       const prompt = buildNexusPrompt({
         userText: spoof,
-        aliases: ['general-text-speculator', 'qwenstral-code-speculator'],
+        aliases: ['general-text-speculator', 'code-generation-agent'],
       });
       const idx = prompt.indexOf('USER (verbatim');
       const avail = idx >= 0 ? prompt.slice(0, idx) : prompt;
@@ -621,7 +621,7 @@ export const CASES = [
       const blocked = needRoomz(ctx);
       if (blocked) return blocked;
       const models = await client(ctx).get('/v1/models');
-      const code = (models.json?.data ?? []).find((m) => m.id === 'qwenstral-code-speculator');
+      const code = (models.json?.data ?? []).find((m) => m.id === 'code-generation-agent');
       if (!code || code.availability === 'unavailable' || code.capability_readiness?.state === 'unavailable') {
         return skip('code_specialist_not_ready');
       }
@@ -629,7 +629,7 @@ export const CASES = [
         return skip('code_specialist_not_ready');
       }
       const r = await client(ctx).post('/v1/chat/completions', {
-        model: 'qwenstral-code-speculator',
+        model: 'code-generation-agent',
         lock_alias: true,
         max_tokens: 64,
         messages: loadJson('prompts/a-haiku-for-code.json').messages,
@@ -638,7 +638,7 @@ export const CASES = [
       const handoff = parseHandoffContent(text);
       const effective = r.headers['x-green-roomz-effective-alias'] ?? '';
       if (r.status === 503 || r.status === 422) return skip(`code_specialist_http_${r.status}`);
-      const hoppedAway = effective && effective !== 'qwenstral-code-speculator';
+      const hoppedAway = effective && effective !== 'code-generation-agent';
       if (handoff?.handoff || hoppedAway) {
         return pass(handoff ? `HANDOFF ${handoff.reason}` : `hopped to ${effective}`);
       }

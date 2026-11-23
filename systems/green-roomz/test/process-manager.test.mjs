@@ -26,7 +26,7 @@ class FakeChild extends EventEmitter {
 
 test('duplicate ensure calls share one start and only owned children are stopped', async () => {
   const manifest = sampleManifest();
-  const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const agent = manifest.agents.find((item) => item.alias === 'code-generation-agent');
   const registry = new AgentRegistry(manifest);
   registry.setStatus(agent.alias, 'cold');
   const spawned = [];
@@ -78,7 +78,7 @@ test('cpu-resident profiles are ordered after vulkan-all when measured weights e
   const model = path.join(dir, 'model.gguf');
   writeFileSync(model, Buffer.alloc(1024));
   const agent = {
-    alias: 'qwenstral-code-speculator',
+    alias: 'code-generation-agent',
     model,
     profiles: [
       { id: 'cpu-4', args: ['--device', 'none', '--n-gpu-layers', '0'] },
@@ -92,7 +92,7 @@ test('cpu-resident profiles are ordered after vulkan-all when measured weights e
 
 test('manifest profile order is kept when weight size is unknown', () => {
   const agent = {
-    alias: 'qwenstral-code-speculator',
+    alias: 'code-generation-agent',
     model: '/tmp/missing-code.gguf',
     profiles: [
       { id: 'cpu-4', args: ['--device', 'none', '--n-gpu-layers', '0'] },
@@ -110,7 +110,7 @@ test('start spawns the preferred profile even under memory pressure (OS pages)',
   truncateSync(model, Math.round(4.36 * 1024 ** 3));
   try {
     const manifest = sampleManifest();
-    const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+    const agent = manifest.agents.find((item) => item.alias === 'code-generation-agent');
     agent.model = model;
     agent.draft_enabled = false;
     agent.profiles = [
@@ -145,7 +145,7 @@ test('start spawns the preferred profile even under memory pressure (OS pages)',
 
 test('start tries the next profile after a non-abort startProfile failure', async () => {
   const manifest = sampleManifest();
-  const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const agent = manifest.agents.find((item) => item.alias === 'code-generation-agent');
   agent.profiles = [
     { id: 'cpu-4', args: ['--device', 'none', '--n-gpu-layers', '0'] },
     { id: 'vulkan-all', args: ['--device', 'Vulkan0', '--n-gpu-layers', 'all'] },
@@ -184,7 +184,7 @@ test('vulkan-all uses logical CPUs minus two (6 on an 8-thread APU)', () => {
 
 test('buildLaunch rewrites vulkan-all threads and leaves cpu-4 threads alone', () => {
   const manifest = sampleManifest();
-  const agent = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const agent = manifest.agents.find((item) => item.alias === 'code-generation-agent');
   const registry = new AgentRegistry(manifest);
   const manager = new ProcessManager({ manifest, registry, spawnImpl() { throw new Error('no spawn'); } });
   const vulkan = manager.buildLaunch(agent, { id: 'vulkan-all', args: ['--device', 'Vulkan0', '--threads', '4', '--threads-batch', '4', '--n-gpu-layers', 'all'] });
@@ -196,7 +196,7 @@ test('buildLaunch rewrites vulkan-all threads and leaves cpu-4 threads alone', (
 test('ensure specialist does not stop the resident nexus', async () => {
   const manifest = sampleManifest();
   const nexus = manifest.agents.find((item) => item.alias === 'tool-router-agent');
-  const code = manifest.agents.find((item) => item.alias === 'qwenstral-code-speculator');
+  const code = manifest.agents.find((item) => item.alias === 'code-generation-agent');
   const registry = new AgentRegistry(manifest);
   registry.setStatus(nexus.alias, 'cold');
   registry.setStatus(code.alias, 'cold');
@@ -219,7 +219,7 @@ test('ensure specialist does not stop the resident nexus', async () => {
   assert.equal(first.resident, true);
   assert.equal(first.child.exitCode, null);
   assert.deepEqual(children[0].killed, []);
-  assert.equal(second.alias, 'qwenstral-code-speculator');
+  assert.equal(second.alias, 'code-generation-agent');
   const launch = manager.buildLaunch(nexus, { id: 'cpu-2', args: ['--device', 'none', '--threads', '2', '--threads-batch', '2', '--n-gpu-layers', '0'] });
   assert.equal(launch.args[launch.args.indexOf('--threads') + 1], '2');
   assert.equal(launch.args[launch.args.indexOf('--port') + 1], '18187');
@@ -246,11 +246,11 @@ test('sweepIdle evicts over-cap and stale specialists, keeps the resident nexus'
   });
   put('tool-router-agent', true, now);                 // resident - never evicted
   put('general-text-speculator', false, now - 1_000);  // fresh, within warm cap
-  put('qwenstral-code-speculator', false, now - 2_000); // over cap (cap = 1)
+  put('code-generation-agent', false, now - 2_000); // over cap (cap = 1)
   put('vision-layout-agent', false, now - 60_000);      // stale + over cap
 
   const evicted = await manager.sweepIdle(now);
-  assert.ok(evicted.includes('qwenstral-code-speculator'));
+  assert.ok(evicted.includes('code-generation-agent'));
   assert.ok(evicted.includes('vision-layout-agent'));
   assert.ok(!evicted.includes('tool-router-agent'), 'resident nexus survives');
   assert.ok(!evicted.includes('general-text-speculator'), 'most-recent specialist stays warm');

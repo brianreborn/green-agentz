@@ -96,7 +96,7 @@ export function parseRouteJson(text) {
 
 const ALIAS_HINTS = {
   'general-text-speculator': 'stories, poems, chat, translation, default',
-  'qwenstral-code-speculator': 'programming, C++, Python, functions, source code',
+  'code-generation-agent': 'programming, C++, Python, functions, source code',
   'image-generation-agent': 'generate or draw a new picture/image',
   'vision-layout-agent': 'user attached an image to look at',
   'speech-synthesis-agent': 'speak or read aloud',

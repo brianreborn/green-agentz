@@ -12,7 +12,7 @@ test('windows manifest has exactly eleven required aliases and no translation ag
   assert.equal(aliases.includes('translation-agent'), false);
   assert.equal(manifest.gateway.policy, 'maximize');
   assert.equal(manifest.agents.find((agent) => agent.alias === 'general-text-speculator').draft_type, 'draft-eagle3');
-  assert.equal(manifest.agents.find((agent) => agent.alias === 'qwenstral-code-speculator').profiles[0].id, 'vulkan-all');
+  assert.equal(manifest.agents.find((agent) => agent.alias === 'code-generation-agent').profiles[0].id, 'vulkan-all');
   assert.equal(manifest.agents.find((agent) => agent.alias === 'general-text-speculator').profiles[0].id, 'vulkan-all');
   const monitor = manifest.agents.find((agent) => agent.alias === 'security-monitor-agent');
   assert.equal(monitor.runtime, 'logical');

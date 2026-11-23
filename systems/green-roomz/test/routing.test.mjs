@@ -79,24 +79,24 @@ test('/tts is rejected on the chat path', () => {
 
 test('an explicit text model remains selected across mixed text history', () => {
   const routed = routeRequest({
-    model: 'qwenstral-code-speculator',
+    model: 'code-generation-agent',
     messages: [
       { role: 'user', content: 'write a C++ program about a hero' },
       { role: 'assistant', content: '#include <iostream>' },
       { role: 'user', content: 'Can you show me an image of how that hero might look?' },
     ],
   }, registry());
-  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.effectiveAlias, 'code-generation-agent');
   assert.equal(routed.reason, 'requested_alias');
 });
 
 test('lock_alias honors the requested specialist', () => {
   const routed = hardRuleRoute({
     lock_alias: true,
-    model: 'qwenstral-code-speculator',
+    model: 'code-generation-agent',
     messages: [{ role: 'user', content: 'hello' }],
   }, registry());
-  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.effectiveAlias, 'code-generation-agent');
   assert.equal(routed.reason, 'lock_alias');
 });
 
@@ -147,23 +147,23 @@ test('plain text does not hard-route to vision-layout-agent', () => {
   assert.notEqual(routed.effectiveAlias, 'vision-layout-agent');
 });
 
-test('/code slash pins qwenstral-code-speculator even when the model is general-text', () => {
+test('/code slash pins code-generation-agent even when the model is general-text', () => {
   const routed = hardRuleRoute({
     model: 'general-text-speculator',
     messages: [{ role: 'user', content: '/code write hello' }],
   }, registry());
-  assert.equal(routed.effectiveAlias, 'qwenstral-code-speculator');
+  assert.equal(routed.effectiveAlias, 'code-generation-agent');
   assert.equal(routed.reason, 'slash_code');
   const parsed = parseSlashCommand({ messages: [{ role: 'user', content: '/code write hello' }] });
   assert.equal(parsed.token, 'code');
-  assert.equal(parsed.alias, 'qwenstral-code-speculator');
+  assert.equal(parsed.alias, 'code-generation-agent');
   const stripped = stripSlashCommand({ messages: [{ role: 'user', content: '/code write hello' }] });
   assert.equal(stripped.messages[0].content, 'write hello');
 });
 
 test('/text slash pins general-text-speculator even on a python prompt', () => {
   const routed = hardRuleRoute({
-    model: 'qwenstral-code-speculator',
+    model: 'code-generation-agent',
     messages: [{ role: 'user', content: '/text write a python function named hello' }],
   }, registry());
   assert.equal(routed.effectiveAlias, 'general-text-speculator');
@@ -181,9 +181,9 @@ test('slash inside a fence is not an operator switch', () => {
 
 test('impractical aliases are skipped by availableAliases and aliasCanAdmit', () => {
   const reg = registry();
-  reg.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
-  assert.equal(aliasCanAdmit(reg, 'qwenstral-code-speculator'), false);
-  assert.equal(availableAliases(reg).includes('qwenstral-code-speculator'), false);
+  reg.setStatus('code-generation-agent', 'unavailable', { missing: ['impractical:RAM'] });
+  assert.equal(aliasCanAdmit(reg, 'code-generation-agent'), false);
+  assert.equal(availableAliases(reg).includes('code-generation-agent'), false);
 });
 
 test('nexus candidates omit vision and audio on plain text', () => {

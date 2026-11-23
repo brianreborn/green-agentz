@@ -123,8 +123,8 @@ function finish(body, registry, alias, reason, modality) {
 const SLASH_ALIASES = Object.freeze({
   vision: 'vision-layout-agent',
   audio: 'audio-transcription-agent',
-  code: 'qwenstral-code-speculator',
-  cpp: 'qwenstral-code-speculator',
+  code: 'code-generation-agent',
+  cpp: 'code-generation-agent',
   text: 'general-text-speculator',
   chat: 'general-text-speculator',
   embed: 'semantic-embedding-agent',

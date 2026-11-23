@@ -3,7 +3,7 @@
   "schema": "green-quality-comparison/v1",
   "not": "throughput; see systems/green-roomz/src/benchmark.mjs and e2e/verify-models.mjs",
   "cases": [
-    { "id": "A-code-intent-plan", "dimension": "A", "mode": "in-process", "title": "planRoute sends code intent to qwenstral-code-speculator" },
+    { "id": "A-code-intent-plan", "dimension": "A", "mode": "in-process", "title": "planRoute sends code intent to code-generation-agent" },
     { "id": "A-chat-intent-plan", "dimension": "A", "mode": "in-process", "title": "planRoute sends chat/prose to general-text-speculator" },
     { "id": "A-image-intent-plan", "dimension": "A", "mode": "in-process", "title": "planRoute sends draw-a-picture text to image-generation-agent" },
     { "id": "A-missing-vision-400", "dimension": "A", "mode": "in-process", "title": "/vision without image part is ValidationError" },

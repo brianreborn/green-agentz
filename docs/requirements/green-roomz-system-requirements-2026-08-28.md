@@ -123,7 +123,7 @@ Each required alias SHALL have at least one qualified implementation and one doc
 - The ASR runner MAY remain CPU-resident while a language model uses Vulkan.
 - Transcription SHALL not automatically invoke translation.
 
-### 4.3 `qwenstral-code-speculator`
+### 4.3 `code-generation-agent`
 
 **Purpose:** source-code generation and transformation, code explanation, constrained JSON, and structural text work.
 
@@ -263,7 +263,7 @@ Translation is a shared language capability, not a dedicated agent.
 - OCR and transcription SHALL preserve the source language by default.
 - Translation MAY occur when explicitly requested by the user or required by an explicitly configured workflow.
 - `general-text-speculator` SHALL be the default local route for ordinary human-language translation only after an explicit translation request or workflow declaration.
-- Code translation of comments, strings, or documentation MAY route to `qwenstral-code-speculator` when code preservation is central to the request.
+- Code translation of comments, strings, or documentation MAY route to `code-generation-agent` when code preservation is central to the request.
 - An operator-configured translation tool MAY override the local route for an explicit request.
 - Capability discovery MAY describe translation as a shared text operation, but SHALL NOT advertise it as an agent, automatic preprocessor, or guaranteed native capability of non-generative agents.
 
@@ -579,7 +579,7 @@ Routing precedence SHALL be deterministic:
 2. Audio on a transcription endpoint routes to `audio-transcription-agent`.
 3. Image/document media routes to `vision-layout-agent` or an explicitly qualified composed workflow.
 4. Text-only requests use the requested alias or `general-text-speculator` as the configured general default.
-5. Structured code tasks MAY route to `qwenstral-code-speculator` when selected explicitly or by an authorized router plan.
+5. Structured code tasks MAY route to `code-generation-agent` when selected explicitly or by an authorized router plan.
 6. Mixed image and audio SHALL be rejected unless the optional video or another qualified composed workflow handles both.
 7. Unknown aliases SHALL return `400` with the allowed aliases.
 

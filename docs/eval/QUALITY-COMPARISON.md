@@ -33,7 +33,7 @@ LMSYS-style “which chatbot is nicer” is out of scope. The question is whethe
 
 ### Aliases (gateway `model` field)
 
-`tool-router-agent` (nexus), `general-text-speculator`, `qwenstral-code-speculator`, `vision-layout-agent`, `audio-transcription-agent`, `image-generation-agent`, `safety-policy-agent`, `security-monitor-agent`, `semantic-embedding-agent`, `retrieval-rerank-agent`, `speech-synthesis-agent`.
+`tool-router-agent` (nexus), `general-text-speculator`, `code-generation-agent`, `vision-layout-agent`, `audio-transcription-agent`, `image-generation-agent`, `safety-policy-agent`, `security-monitor-agent`, `semantic-embedding-agent`, `retrieval-rerank-agent`, `speech-synthesis-agent`.
 
 `auto` and `tool-router-agent` are **router sentinels**, not user-visible specialist targets (`systems/green-roomz/src/routing.mjs` `ROUTER_SENTINELS`).
 
@@ -97,7 +97,7 @@ In the **live** `green-roomz` checkout (not vendored into Agentz):
 - `src/compile-prompt.mjs` — `compileStockPrompt`, `stockPromptLayers`, `FRAME_NAMES`
 - `src/gateway.mjs` — `stockSystemPrompt`: try compile; **catch → raw kernel** if `policies/frames/` is missing or the nexus microkernel bound trips
 - Frames: `agency`, `memory-feedback-loop`, `confidence`, `handoff`
-- MFL frame is only for cognitive aliases (`general-text-speculator`, `qwenstral-code-speculator`); nexus / safety / monitor stay kernel-only
+- MFL frame is only for cognitive aliases (`general-text-speculator`, `code-generation-agent`); nexus / safety / monitor stay kernel-only
 
 This Agentz copy of Roomz still injects **raw kernels** via `loadDeclaredKernel`. Quality results **must record** `prompt_mode: "compiled-frames" | "raw-kernel-failsafe"`. Comparing roomz vs raw-llama is meaningless if you do not know which prompt ran.
 
@@ -141,7 +141,7 @@ Automatic subset ≈ **24 in-process + ~10 live roomz**. Pairwise is a handful o
 
 - Fixture: `fixtures/prompts/a-code.json` — “Write a Python function named `hello` that returns 42.”
 - Call: `planRoute` (`logical-router.mjs`).
-- Pass: `route === "qwenstral-code-speculator"` and `reason_code === "code_intent"`.
+- Pass: `route === "code-generation-agent"` and `reason_code === "code_intent"`.
 - `raw-llama` / cloud: skip (no router).
 
 ### A2 `A-chat-intent-plan` (in-process)
@@ -180,12 +180,12 @@ Automatic subset ≈ **24 in-process + ~10 live roomz**. Pairwise is a handful o
 ### A8 `A-live-route-code` (live roomz)
 
 - `POST /v1/chat/completions/route` with A1 fixture.
-- Pass (floor): JSON route object; `route` is **not** `vision-layout-agent` | `audio-transcription-agent` | `speech-synthesis-agent`. Prefer `qwenstral-code-speculator`. Fail if the gateway invents image/audio work for a Python function.
+- Pass (floor): JSON route object; `route` is **not** `vision-layout-agent` | `audio-transcription-agent` | `speech-synthesis-agent`. Prefer `code-generation-agent`. Fail if the gateway invents image/audio work for a Python function.
 - Header `x-green-roomz-effective-alias` if the full chat path is used must not be a missing-modality specialist.
 
 ### A9 `A-live-code-lock-handoff-haiku` (live roomz)
 
-- `lock_alias: true`, `model: qwenstral-code-speculator`, fixture `a-haiku-for-code.json` (“write a haiku about rain”; not a programming task).
+- `lock_alias: true`, `model: code-generation-agent`, fixture `a-haiku-for-code.json` (“write a haiku about rain”; not a programming task).
 - Skip if that alias is `unavailable` or not `ready` (`reason: "code_specialist_not_ready"`).
 - Pass: first visible assistant text is a HANDOFF (parsed by `parseHandoffContent`) **or** the gateway hops away (`x-green-roomz-hops` / effective alias ≠ code after handoff). Fail if the code kernel writes a poem/story **without** HANDOFF (inventing a specialist reply to be helpful). That is the policy in `policies/code-structured.md`.
 
@@ -214,7 +214,7 @@ Automatic subset ≈ **24 in-process + ~10 live roomz**. Pairwise is a handful o
 
 ### B3 `B-unavailable-not-routable` (in-process)
 
-- Registry status `qwenstral-code-speculator` = `unavailable` / `missing: ['impractical:RAM']`.
+- Registry status `code-generation-agent` = `unavailable` / `missing: ['impractical:RAM']`.
 - Pass: `isRoutableAlias` is false. `offlinePlan` must not return that alias; fallback `general-text-speculator` if routable.
 
 ### B4 `B-live-unavailable-does-not-fake-pixels` (live roomz)
@@ -264,7 +264,7 @@ Kernel (`policies/tool-router.md`):
 
 ### C5 `C-stock-prompt-mode` (in-process, skip-ok)
 
-- If `systems/green-roomz/src/compile-prompt.mjs` exists, `stockPromptLayers('qwenstral-code-speculator')` includes `handoff` + `memory-feedback-loop`; nexus layers are `[]`.
+- If `systems/green-roomz/src/compile-prompt.mjs` exists, `stockPromptLayers('code-generation-agent')` includes `handoff` + `memory-feedback-loop`; nexus layers are `[]`.
 - Else skip `reason: "compile-prompt.mjs not in this tree; injectSystemPolicy uses raw kernel"`.
 
 ---
@@ -280,8 +280,8 @@ Kernel (`policies/tool-router.md`):
 
 ### D2 `D-lock-alias-pins` (in-process)
 
-- `model: qwenstral-code-speculator`, `lock_alias: true`, chat prompt.
-- Pass: `effectiveAlias === 'qwenstral-code-speculator'`, `reason === 'lock_alias'`.
+- `model: code-generation-agent`, `lock_alias: true`, chat prompt.
+- Pass: `effectiveAlias === 'code-generation-agent'`, `reason === 'lock_alias'`.
 - Without `lock_alias`, requested alias still pins if routable (`reason === 'requested_alias'`) — document that requested alias is already a pin; `lock_alias` is the explicit pin used by verify-models and the resident nexus test.
 
 ### D3 `D-live-auto-vs-lock` (live roomz)
@@ -491,7 +491,7 @@ Canonical schema: `eval/quality/schema.mjs` (`RESULT_SCHEMA_ID = "green-quality-
       "mode": "in-process",
       "provider": "in-process",
       "outcome": "pass",
-      "reason": "route=qwenstral-code-speculator",
+      "reason": "route=code-generation-agent",
       "ms": 12,
       "checks": [{ "name": "route", "ok": true }],
       "transcript_ref": null

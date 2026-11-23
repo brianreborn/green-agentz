@@ -63,7 +63,7 @@ Startup SHALL fail closed if an alias is missing, a digest does not match, a ref
   - `--spec-ngram-mod-n-max 48`, unless benchmarks justify a different manifest value
 - **Prohibited configuration:** `--spec-draft-n-max` SHALL NOT be used to configure `ngram-mod`.
 
-#### `qwenstral-code-speculator`
+#### `code-generation-agent`
 
 - **Core task:** source-code generation and transformation, schema-constrained JSON, and structural text evaluation.
 - **Target model:** `qwen2.5-coder-7b-instruct-q4_k_m.gguf`.

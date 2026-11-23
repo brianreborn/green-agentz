@@ -34,7 +34,7 @@ test('headroom is 2 GiB on PCs and 256 MiB on phones', () => {
 test('a CPU profile over the free-RAM estimate is admitted but flagged tight (OS pages)', () => {
   const { model, cleanup } = withModel();
   try {
-    const agent = { alias: 'qwenstral-code-speculator', model, draft_enabled: false };
+    const agent = { alias: 'code-generation-agent', model, draft_enabled: false };
     const profile = cpuProfile();
     const estimate = estimateResidentBytes(agent, profile, { includeDraft: false });
     assert.equal(estimate, Math.round(MODEL_BYTES * 1.6 + 512 * 1024 * 1024));
@@ -52,7 +52,7 @@ test('a CPU profile over the free-RAM estimate is admitted but flagged tight (OS
 test('same CPU profile is admitted when 20 GiB is free', () => {
   const { model, cleanup } = withModel();
   try {
-    const agent = { alias: 'qwenstral-code-speculator', model };
+    const agent = { alias: 'code-generation-agent', model };
     const admitted = profileAdmitted(agent, cpuProfile(), { freeMemoryBytes: 20 * GiB, includeDraft: false });
     assert.equal(admitted.ok, true);
     assert.equal(admitted.reason, 'admitted');
@@ -65,7 +65,7 @@ test('same CPU profile is admitted when 20 GiB is free', () => {
 test('GPU profile is admitted even when free memory is tight', () => {
   const { model, cleanup } = withModel();
   try {
-    const agent = { alias: 'qwenstral-code-speculator', model };
+    const agent = { alias: 'code-generation-agent', model };
     const admitted = profileAdmitted(agent, gpuProfile(), { freeMemoryBytes: 1, includeDraft: false });
     assert.equal(admitted.ok, true);
     assert.equal(admitted.estimateBytes, null);
@@ -76,7 +76,7 @@ test('GPU profile is admitted even when free memory is tight', () => {
 });
 
 test('missing model is admitted as unknown rather than rejected', () => {
-  const agent = { alias: 'qwenstral-code-speculator', model: path.join(os.tmpdir(), 'grz-missing-code.gguf') };
+  const agent = { alias: 'code-generation-agent', model: path.join(os.tmpdir(), 'grz-missing-code.gguf') };
   const admitted = profileAdmitted(agent, cpuProfile(), { freeMemoryBytes: 1, includeDraft: false });
   assert.equal(admitted.ok, true);
   assert.equal(admitted.estimateBytes, null);
@@ -86,10 +86,10 @@ test('missing model is admitted as unknown rather than rejected', () => {
 test('agentCanAdmit always admits under memory pressure (OS pages); CPU-only run is flagged tight', () => {
   const { model, cleanup } = withModel();
   try {
-    const withGpu = { alias: 'qwenstral-code-speculator', model, draft_enabled: false, profiles: [cpuProfile(), gpuProfile()] };
+    const withGpu = { alias: 'code-generation-agent', model, draft_enabled: false, profiles: [cpuProfile(), gpuProfile()] };
     assert.equal(agentCanAdmit(withGpu, { freeMemoryBytes: 5 * GiB, includeDraft: false }).ok, true);
 
-    const cpuOnly = { alias: 'qwenstral-code-speculator', model, draft_enabled: false, profiles: [cpuProfile()] };
+    const cpuOnly = { alias: 'code-generation-agent', model, draft_enabled: false, profiles: [cpuProfile()] };
     const tight = agentCanAdmit(cpuOnly, { freeMemoryBytes: 5 * GiB, includeDraft: false });
     assert.equal(tight.ok, true);
     assert.equal(tight.pressure, 'tight');

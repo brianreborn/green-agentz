@@ -122,21 +122,21 @@ test('path ending in /route returns the plan JSON', async (t) => {
   });
   assert.equal(result.status, 200);
   const plan = JSON.parse(result.body.choices[0].message.content);
-  assert.equal(plan.route, 'qwenstral-code-speculator');
+  assert.equal(plan.route, 'code-generation-agent');
   assert.equal(plan.reason_code, 'code_intent');
 });
 
-test('tool-router python-function prompt proxies to qwenstral-code-speculator, not a plan JSON', async (t) => {
+test('tool-router python-function prompt proxies to code-generation-agent, not a plan JSON', async (t) => {
   let captured;
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator'],
+    ready: ['code-generation-agent'],
     stubEnsure: true,
     fetchImpl: async (url, init) => {
       captured = { url, body: JSON.parse(Buffer.from(init.body).toString()) };
       return jsonFetch({
         id: 'mock',
         object: 'chat.completion',
-        model: 'qwenstral-code-speculator',
+        model: 'code-generation-agent',
         choices: [{ index: 0, message: { role: 'assistant', content: 'def hello():\n    return 1\n', reasoning_content: 'thinking dump' }, finish_reason: 'stop' }],
         timings: { predicted_n: 9 },
       });
@@ -149,18 +149,18 @@ test('tool-router python-function prompt proxies to qwenstral-code-speculator, n
     body: { model: 'tool-router-agent', messages: [{ role: 'user', content: 'write a python function named hello' }] },
   });
   assert.equal(result.status, 200);
-  assert.equal(result.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'code-generation-agent');
   assert.equal(result.body.choices[0].message.content.includes('def hello'), true);
   assert.equal(result.body.choices[0].message.reasoning_content, undefined);
   assert.equal(result.body.timings, undefined);
   assert.match(String(captured.url), /18183/);
-  assert.equal(captured.body.model, 'qwenstral-code-speculator');
+  assert.equal(captured.body.model, 'code-generation-agent');
   assert.doesNotMatch(result.body.choices[0].message.content, /reason_code/);
 });
 
 test('omitted model with a python function proxies to the code alias', async (t) => {
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator'],
+    ready: ['code-generation-agent'],
     stubEnsure: true,
     fetchImpl: async () => jsonFetch({
       choices: [{ message: { role: 'assistant', content: 'def add(a, b):\n    return a + b\n' } }],
@@ -172,13 +172,13 @@ test('omitted model with a python function proxies to the code alias', async (t)
     headers: { 'content-type': 'application/json' },
     body: { messages: [{ role: 'user', content: 'write a python function that adds' }] },
   });
-  assert.equal(result.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'code-generation-agent');
   assert.match(result.body.choices[0].message.content, /def add/);
 });
 
 test('explicit general-text model remains selected for a code-looking prompt', async (t) => {
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['code-generation-agent', 'general-text-speculator'],
     stubEnsure: true,
     fetchImpl: async () => jsonFetch({
       choices: [{ message: { role: 'assistant', content: '#include <iostream>\nint main() { return 0; }\n' } }],
@@ -198,11 +198,11 @@ test('session keeps an explicitly requested general-text model', async (t) => {
   const sessions = new SessionLedger();
   const { server } = await withServer(t, {}, {
     sessions,
-    ready: ['qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['code-generation-agent', 'general-text-speculator'],
     stubEnsure: true,
     fetchImpl: async (_url, init) => {
       const body = JSON.parse(Buffer.from(init.body).toString());
-      const content = body.model === 'qwenstral-code-speculator' ? 'def foo():\n    pass\n' : 'a limerick about noodles';
+      const content = body.model === 'code-generation-agent' ? 'def foo():\n    pass\n' : 'a limerick about noodles';
       return jsonFetch({ choices: [{ message: { role: 'assistant', content } }] });
     },
   });
@@ -226,7 +226,7 @@ test('session keeps an explicitly requested general-text model', async (t) => {
 
 test('explicit translate prompt proxies to general-text-speculator', async (t) => {
   const { server } = await withServer(t, {}, {
-    ready: ['general-text-speculator', 'qwenstral-code-speculator'],
+    ready: ['general-text-speculator', 'code-generation-agent'],
     stubEnsure: true,
     fetchImpl: async () => jsonFetch({
       choices: [{ message: { role: 'assistant', content: 'Hello world' } }],
@@ -307,7 +307,7 @@ test('general-text thinking is off by default including max_tokens 256; explicit
   assert.equal(explicit.chat_template_kwargs, undefined);
   const kwargs = prepareInferenceBody({ max_tokens: 256, chat_template_kwargs: { enable_thinking: true }, messages: [] }, agent);
   assert.equal(kwargs.chat_template_kwargs.enable_thinking, true);
-  const code = prepareInferenceBody({ max_tokens: 256, messages: [] }, { alias: 'qwenstral-code-speculator' });
+  const code = prepareInferenceBody({ max_tokens: 256, messages: [] }, { alias: 'code-generation-agent' });
   assert.equal(code.chat_template_kwargs, undefined);
 });
 
@@ -351,7 +351,7 @@ test('health includes mailbox stats and GET /v1/monitor/recent is cheap', async 
 
 test('completion hop pushes to mailbox without awaiting drain', async (t) => {
   const { server, gateway } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator'],
+    ready: ['code-generation-agent'],
     stubEnsure: true,
     fetchImpl: async () => jsonFetch({
       choices: [{ message: { role: 'assistant', content: 'def hello():\n    return 1\n' } }],
@@ -370,12 +370,12 @@ test('completion hop pushes to mailbox without awaiting drain', async (t) => {
   assert.ok(gateway.ipc.stats().hot.pushed > beforeIpc);
   const last = gateway.mailbox.recent(1)[0];
   assert.equal(last.kind, 'success');
-  assert.equal(last.source, 'qwenstral-code-speculator');
+  assert.equal(last.source, 'code-generation-agent');
   assert.equal(typeof last.seq, 'number');
   assert.equal(typeof last.ticket, 'string');
   const lastIpc = gateway.ipc.recent(1)[0];
   assert.equal(lastIpc.kind, 'success');
-  assert.equal(lastIpc.source, 'qwenstral-code-speculator');
+  assert.equal(lastIpc.source, 'code-generation-agent');
 });
 
 test('POST security-monitor-agent snapshots mailbox without consulting nexus', async (t) => {
@@ -453,13 +453,13 @@ test('impractical specialist is not started; completion stays on the resident ne
     stubEnsure: true,
     fetchImpl: async (url, init) => {
       urls.push(String(url));
-      assert.equal(String(url).includes(':18183'), false, 'must not hop to qwenstral-code-speculator');
+      assert.equal(String(url).includes(':18183'), false, 'must not hop to code-generation-agent');
       const body = JSON.parse(Buffer.from(init.body).toString());
       assert.equal(body.messages.some((message) => String(message.content ?? '').includes('AVAILABLE:')), false);
       return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
     },
   });
-  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  registry.setStatus('code-generation-agent', 'unavailable', { missing: ['impractical:RAM'] });
   registry.setStatus('general-text-speculator', 'unavailable', { missing: ['impractical:RAM'] });
   const ensured = [];
   const original = processes.ensure;
@@ -478,7 +478,7 @@ test('impractical specialist is not started; completion stays on the resident ne
   assert.equal(result.status, 200);
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
   assert.equal(result.body.choices[0].message.content, 'resident-ok');
-  assert.equal(ensured.includes('qwenstral-code-speculator'), false);
+  assert.equal(ensured.includes('code-generation-agent'), false);
   assert.ok(elapsed < 2000, `resident fallback took ${elapsed}ms`);
   assert.equal(urls.every((url) => url.includes('18187')), true);
 });
@@ -577,7 +577,7 @@ test('observeHop posts mailbox and ipc; logger emit throw is swallowed', () => {
 test('/code slash pins the code specialist and skips nexus', async (t) => {
   const urls = [];
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    ready: ['code-generation-agent', 'general-text-speculator', 'tool-router-agent'],
     stubEnsure: true,
     fetchImpl: async (url) => {
       urls.push(String(url));
@@ -594,7 +594,7 @@ test('/code slash pins the code specialist and skips nexus', async (t) => {
     },
   });
   assert.equal(result.status, 200);
-  assert.equal(result.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(result.headers['x-green-roomz-effective-alias'], 'code-generation-agent');
   assert.equal(result.headers['x-green-roomz-route-reason'], 'slash_code');
   assert.equal(urls.some((url) => url.includes(':18187')), false);
   assert.equal(urls.some((url) => url.includes(':18183')), true);
@@ -603,7 +603,7 @@ test('/code slash pins the code specialist and skips nexus', async (t) => {
 test('/text slash pins general-text even on a python-looking prompt', async (t) => {
   const urls = [];
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    ready: ['code-generation-agent', 'general-text-speculator', 'tool-router-agent'],
     stubEnsure: true,
     fetchImpl: async (url) => {
       urls.push(String(url));
@@ -615,7 +615,7 @@ test('/text slash pins general-text even on a python-looking prompt', async (t) 
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: {
-      model: 'qwenstral-code-speculator',
+      model: 'code-generation-agent',
       messages: [{ role: 'user', content: '/text write a python function named hello' }],
     },
   });
@@ -666,7 +666,7 @@ test('/code on an impractical specialist falls back to resident 0.5B instead of 
       return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'resident-ok' } }] });
     },
   });
-  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:RAM'] });
+  registry.setStatus('code-generation-agent', 'unavailable', { missing: ['impractical:RAM'] });
   const ensured = [];
   const original = processes.ensure;
   processes.ensure = async (agent) => {
@@ -683,7 +683,7 @@ test('/code on an impractical specialist falls back to resident 0.5B instead of 
   assert.equal(result.status, 200);
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'tool-router-agent');
   assert.equal(result.body.choices[0].message.content, 'resident-ok');
-  assert.equal(ensured.includes('qwenstral-code-speculator'), false);
+  assert.equal(ensured.includes('code-generation-agent'), false);
   assert.equal(urls.every((url) => url.includes('18187')), true);
 });
 
@@ -786,7 +786,7 @@ test('explicit code model stays selected after a /code turn', async (t) => {
   const urls = [];
   const sessions = new SessionLedger();
   const { server } = await withServer(t, {}, {
-    ready: ['qwenstral-code-speculator', 'general-text-speculator', 'tool-router-agent'],
+    ready: ['code-generation-agent', 'general-text-speculator', 'tool-router-agent'],
     stubEnsure: true,
     sessions,
     fetchImpl: async (url) => {
@@ -805,14 +805,14 @@ test('explicit code model stays selected after a /code turn', async (t) => {
     headers: { 'content-type': 'application/json' },
     body: { messages: [{ role: 'user', content: '/code int main' }] },
   });
-  assert.equal(first.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(first.headers['x-green-roomz-effective-alias'], 'code-generation-agent');
   const sid = first.headers['x-session-id'];
   const second = await request(server, {
     path: '/v1/chat/completions',
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-session-id': sid },
     body: {
-      model: 'qwenstral-code-speculator',
+      model: 'code-generation-agent',
       messages: [
         { role: 'user', content: '/code int main' },
         { role: 'assistant', content: 'int main() {}' },
@@ -821,7 +821,7 @@ test('explicit code model stays selected after a /code turn', async (t) => {
     },
   });
   assert.equal(second.status, 200);
-  assert.equal(second.headers['x-green-roomz-effective-alias'], 'qwenstral-code-speculator');
+  assert.equal(second.headers['x-green-roomz-effective-alias'], 'code-generation-agent');
   assert.equal(urls.some((url) => url.includes(':18187')), false);
 });
 

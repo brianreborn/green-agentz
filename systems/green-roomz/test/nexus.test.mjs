@@ -112,7 +112,7 @@ test('image ask after a C++ story hits nexus, skips missing image-gen, does not 
     { route: 'general-text-speculator', confidence: 0.7, reason: 'image-gen unavailable' },
   ];
   const { server, processes } = await withServer(t, {
-    ready: ['tool-router-agent', 'qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['tool-router-agent', 'code-generation-agent', 'general-text-speculator'],
     fetchImpl: nexusThenSpecialists(nexusReplies, (href) => {
       assert.equal(href.includes(':18183'), false, 'must not start the code specialist');
       assert.match(href, /18184/);
@@ -133,19 +133,19 @@ test('image ask after a C++ story hits nexus, skips missing image-gen, does not 
   assert.equal(result.status, 200);
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
   assert.equal(result.headers['x-green-roomz-nexus'], 'tool-router-agent');
-  assert.doesNotMatch(result.headers['x-green-roomz-hops'] ?? '', /qwenstral-code-speculator/);
+  assert.doesNotMatch(result.headers['x-green-roomz-hops'] ?? '', /code-generation-agent/);
   assert.match(result.body.choices[0].message.content, /hero|cannot draw/i);
-  assert.equal(ensured.includes('qwenstral-code-speculator'), false);
+  assert.equal(ensured.includes('code-generation-agent'), false);
   assert.equal(ensured.includes('image-generation-agent'), false);
 });
 
 test('HANDOFF in first specialist tokens routes to a second specialist', async (t) => {
   let specialistCalls = 0;
   const { server } = await withServer(t, {
-    ready: ['tool-router-agent', 'qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['tool-router-agent', 'code-generation-agent', 'general-text-speculator'],
     fetchImpl: nexusThenSpecialists(
       [
-        { route: 'qwenstral-code-speculator', confidence: 0.8, reason: 'looks like code' },
+        { route: 'code-generation-agent', confidence: 0.8, reason: 'looks like code' },
         { route: 'general-text-speculator', confidence: 0.8, reason: 'code handed off' },
       ],
       (href) => {
@@ -161,11 +161,11 @@ test('HANDOFF in first specialist tokens routes to a second specialist', async (
     path: '/v1/chat/completions',
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: { model: 'qwenstral-code-speculator', messages: [{ role: 'user', content: 'tell me a short hero story' }] },
+    body: { model: 'code-generation-agent', messages: [{ role: 'user', content: 'tell me a short hero story' }] },
   });
   assert.equal(result.status, 200);
   assert.equal(result.headers['x-green-roomz-effective-alias'], 'general-text-speculator');
-  assert.match(result.headers['x-green-roomz-hops'], /qwenstral-code-speculator/);
+  assert.match(result.headers['x-green-roomz-hops'], /code-generation-agent/);
   assert.match(result.headers['x-green-roomz-hops'], /general-text-speculator/);
   assert.match(result.body.choices[0].message.content, /Once upon a time/);
   assert.equal(specialistCalls, 2);
@@ -174,10 +174,10 @@ test('HANDOFF in first specialist tokens routes to a second specialist', async (
 test('visited blocks looping the same specialist', async (t) => {
   const ensured = [];
   const { server, processes } = await withServer(t, {
-    ready: ['tool-router-agent', 'qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['tool-router-agent', 'code-generation-agent', 'general-text-speculator'],
     fetchImpl: nexusThenSpecialists(
-      [{ route: 'qwenstral-code-speculator', confidence: 1, reason: 'always code' }],
-      () => sseFetch('HANDOFF {"reason":"not my job","suggest":"qwenstral-code-speculator"}'),
+      [{ route: 'code-generation-agent', confidence: 1, reason: 'always code' }],
+      () => sseFetch('HANDOFF {"reason":"not my job","suggest":"code-generation-agent"}'),
     ),
   });
   const original = processes.ensure;
@@ -196,14 +196,14 @@ test('visited blocks looping the same specialist', async (t) => {
   });
   assert.equal(result.status, 422);
   assert.equal(result.body.error.type, 'route_exhausted');
-  assert.ok(result.body.error.visited.includes('qwenstral-code-speculator'));
-  assert.equal(ensured.filter((alias) => alias === 'qwenstral-code-speculator').length, 1);
+  assert.ok(result.body.error.visited.includes('code-generation-agent'));
+  assert.equal(ensured.filter((alias) => alias === 'code-generation-agent').length, 1);
 });
 
 test('actual image part still routes to vision without asking the nexus', async (t) => {
   let nexusHits = 0;
   const { server } = await withServer(t, {
-    ready: ['vision-layout-agent', 'tool-router-agent', 'qwenstral-code-speculator'],
+    ready: ['vision-layout-agent', 'tool-router-agent', 'code-generation-agent'],
     fetchImpl: async (url) => {
       const href = String(url);
       if (href.includes(':18187')) {
@@ -219,7 +219,7 @@ test('actual image part still routes to vision without asking the nexus', async 
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: {
-      model: 'qwenstral-code-speculator',
+      model: 'code-generation-agent',
       messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,xxxx' } }] }],
     },
   });
@@ -232,20 +232,20 @@ test('actual image part still routes to vision without asking the nexus', async 
 test('consultNexus omits impractical aliases from AVAILABLE the way unused vision/audio are omitted', async (t) => {
   const enums = [];
   const { server, registry } = await withServer(t, {
-    ready: ['tool-router-agent', 'qwenstral-code-speculator', 'general-text-speculator'],
+    ready: ['tool-router-agent', 'code-generation-agent', 'general-text-speculator'],
     fetchImpl: async (url, init) => {
       const href = String(url);
       const body = JSON.parse(Buffer.from(init.body).toString());
       if (href.includes(':18187')) {
         enums.push(body.json_schema?.properties?.route?.enum ?? []);
-        assert.equal(enums.at(-1).includes('qwenstral-code-speculator'), false);
+        assert.equal(enums.at(-1).includes('code-generation-agent'), false);
         assert.equal(enums.at(-1).includes('vision-layout-agent'), false);
         return jsonFetch({ choices: [{ message: { role: 'assistant', content: JSON.stringify({ route: 'general-text-speculator', confidence: 0.7, reason: 'text' }) } }] });
       }
       return jsonFetch({ choices: [{ message: { role: 'assistant', content: 'hello from text' } }] });
     },
   });
-  registry.setStatus('qwenstral-code-speculator', 'unavailable', { missing: ['impractical:estimate 9800000000 + headroom 2147483648 > free 11000000000'] });
+  registry.setStatus('code-generation-agent', 'unavailable', { missing: ['impractical:estimate 9800000000 + headroom 2147483648 > free 11000000000'] });
   const result = await request(server, {
     path: '/v1/chat/completions',
     method: 'POST',
