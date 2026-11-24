@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$Root = 'C:\Users\brian\Documents\green-roomz'
+$Root = Split-Path -Parent $PSScriptRoot
 $Node = 'C:\Program Files\nodejs\node.exe'
 $Log = Join-Path $Root 'data\serve.log'
 $Port = 8080

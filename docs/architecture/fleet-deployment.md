@@ -139,7 +139,7 @@ binds together:
 - [Process ownership and profile selection](../../systems/green-roomz/src/process-manager.mjs)
 - [Host fingerprint adapters](../../systems/green-roomz/src/hosts/windows.mjs) and [Android sidecar boundary](../../systems/green-roomz/src/hosts/android.mjs)
 - [Fleet hardware observations and constrained-device policy](../../systems/green-roomz/docs/fleet-targets.md)
-- [Note 9 Termux onboarding constraints](../../systems/green-roomz/docs/note9-termux.md)
+- [Legacy Android phone Termux onboarding constraints](../../systems/green-roomz/docs/android-legacy-termux.md)
 - [Security-monitor component map and extraction gate](../../systems/green-roomz/docs/security-monitor-component-map.md)
 - [Security-monitor requirements pointer](../../systems/green-roomz/docs/security-monitor-requirements.md)
 

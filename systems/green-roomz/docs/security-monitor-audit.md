@@ -4,14 +4,14 @@ Canonical spec: `docs/security-monitor-requirements.md`
 
 ## Executive
 
-Coherent PQ-style intent. Strange: several MUSTs cannot all be true on qodesh (Athlon 1+1) and stock Note 9.
+Coherent PQ-style intent. Strange: several MUSTs cannot all be true on mvp-host (Athlon 1+1) and stock Android-legacy phone.
 
 ## Blockers
 
-- **F1** 3-replica majority vs qodesh 1+1. Do not freeze REPLICAS=3. Quorum at n=1 unanswered.
+- **F1** 3-replica majority vs mvp-host 1+1. Do not freeze REPLICAS=3. Quorum at n=1 unanswered.
 - **F2** Three vote domains (local replicas, live peers, local-wipe-must-not-wait-on-WAN). Do not freeze one Vote{n=3}.
 - **F3** Copy-only vs mapped pinned host memory. GPU path: copy-engine private slot or host memcpy. Monitor↔monitor copy-only.
-- **F4** Highest-grade default secure_reboot vs Note 9 no AID_ROOT. Missing verbs reject, never no-op success.
+- **F4** Highest-grade default secure_reboot vs Android-legacy phone no AID_ROOT. Missing verbs reject, never no-op success.
 - **F5** Respond MUST live outside 8080; 8080 is the only process. v1: lockdown/reboot/secure_reboot uncallable stubs.
 - **F6** Same graph for machine and ifX. Need verb × target matrix. lockdown(ifX) / secure_reboot(eth0) must not type-check.
 - **F7** Android “same envelope” vs almost none of the call table. Freeze fields + capability mask; missing bit = reject.

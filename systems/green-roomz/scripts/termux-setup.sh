@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Green-Roomz Note9 Termux setup — no root
+# Green-Roomz Android-legacy phone Termux setup — no root
 # Runtime is copied into $HOME because SELinux blocks executing /data/local/tmp.
 set -uo pipefail
 SD=/sdcard/Download/grz
@@ -7,7 +7,7 @@ SRC_TMP=/data/local/tmp/grz
 LOG=$HOME/grz-setup.log
 mkdir -p "$SD" "$HOME"
 exec > >(tee -a "$LOG" | tee -a "$SD/setup.log") 2>&1
-echo "=== note9 setup $(date -Is 2>/dev/null || date) ==="
+echo "=== android-legacy setup $(date -Is 2>/dev/null || date) ==="
 echo "uid=$(id)"
 echo "HOME=$HOME PREFIX=${PREFIX:-}"
 
@@ -65,7 +65,7 @@ test -x "$RT/bin/llama-server" || { echo "ERROR: llama-server not executable at 
 "$RT/run-llama-server.sh" --version | head -3 || echo "WARN: version probe failed"
 
 # Point manifest at copied model if present
-MAN="$HOME_GRZ/config/agents.note9.json"
+MAN="$HOME_GRZ/config/agents.android-termux.json"
 if [[ -f $RT/models/Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf ]]; then
   sed -i 's#/data/local/tmp/grz/models/Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf#${HOME}/grz-runtime/models/Qwenstral-Small-3.1-0.5B.Q4_K_M.gguf#g' "$MAN"
 fi
@@ -78,13 +78,13 @@ export LD_LIBRARY_PATH="$RT/lib:$RT/bin${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 cd "$HOME_GRZ"
 
 echo "=== validate ==="
-node ./bin/green-roomz.mjs validate --manifest ./config/agents.note9.json | tee "$HOME/grz-validate.json" | tee "$SD/validate.json"
+node ./bin/green-roomz.mjs validate --manifest ./config/agents.android-termux.json | tee "$HOME/grz-validate.json" | tee "$SD/validate.json"
 
 pkill -f 'green-roomz.mjs serve' 2>/dev/null || true
 sleep 1
 
 echo "=== serve ==="
-nohup node ./bin/green-roomz.mjs serve --manifest ./config/agents.note9.json --host 127.0.0.1 --port 8080 \
+nohup node ./bin/green-roomz.mjs serve --manifest ./config/agents.android-termux.json --host 127.0.0.1 --port 8080 \
   >"$HOME/grz-serve.out.log" 2>"$HOME/grz-serve.err.log" &
 echo "serve_pid=$!"
 echo $! >"$HOME/grz-serve.pid"
